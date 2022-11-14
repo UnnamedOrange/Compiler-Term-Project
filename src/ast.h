@@ -11,6 +11,7 @@ public:
     virtual ~BaseAST() = default;
 
     virtual void Dump() const = 0;
+    virtual std::string Koopa() const = 0;
 };
 
 // CompUnit 是 BaseAST
@@ -26,6 +27,7 @@ public:
         func_def->Dump();
         std::cout << " }";
     }
+    std::string Koopa() const override { return func_def->Koopa(); }
 };
 
 // FuncDef 也是 BaseAST
@@ -44,6 +46,11 @@ public:
         block->Dump();
         std::cout << " }";
     }
+    std::string Koopa() const override
+    {
+        return "fun @" + ident + "(): " + func_type->Koopa() + " {\n" +
+               block->Koopa() + "}\n";
+    }
 };
 
 // FuncType 也是 BaseAST
@@ -55,6 +62,12 @@ public:
     void Dump() const override
     {
         std::cout << "FuncTypeAST { " << type << " }";
+    }
+    std::string Koopa() const override
+    {
+        if (type == "int")
+            return "i32";
+        return type;
     }
 };
 
@@ -70,6 +83,7 @@ public:
         stmt->Dump();
         std::cout << " }";
     }
+    std::string Koopa() const override { return "%entry:\n" + stmt->Koopa(); }
 };
 
 // Stmt 也是 BaseAST
@@ -79,4 +93,8 @@ public:
     int number;
 
     void Dump() const override { std::cout << "StmtAST { " << number << " }"; }
+    std::string Koopa() const override
+    {
+        return "ret " + std::to_string(number) + "\n";
+    }
 };

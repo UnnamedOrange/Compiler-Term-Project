@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstdio>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -37,5 +38,11 @@ int main(int argc, const char* argv[])
     // 输出解析得到的 AST, 其实就是个字符串
     ast->Dump();
     cout << endl;
+
+    // 输出 Koopa 代码。
+    auto code = ast->Koopa();
+    ofstream ofs(output);
+    ofs << code;
+
     return 0;
 }
