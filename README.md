@@ -2,6 +2,10 @@
 
 Compiler Term Project 2022
 
+> 注意
+>
+> 本分支用于探索环境的搭建，在最接近参考代码的情况下完成了 lv1 和 lv2。之后的代码不再使用该分支。
+
 ## Utilities
 
 Built-in utilities:
