@@ -23,7 +23,7 @@ fi
 echo "Use case file ${case_file}."
 
 # Run case.
-build/compiler -riscv case/${case_file} -o build/${id}
+build/compiler -riscv case/${case_file} -o build/${id} || exit
 
 # Print output.
 more build/${id}
