@@ -2,6 +2,10 @@
 
 Compiler Term Project 2022
 
+> 注意
+>
+> 本分支可以作为环境搭建完成后的模板。之后的开发可以基于本分支。
+
 ## Utilities
 
 Built-in utilities:
