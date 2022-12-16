@@ -16,6 +16,8 @@
 
 namespace compiler::ast
 {
+    inline int global_result_id;
+
     class ast_base_t;
     /**
      * @brief General AST type using smart pointer.
@@ -27,8 +29,29 @@ namespace compiler::ast
      */
     class ast_base_t
     {
+    private:
+        mutable int result_id{};
+
     public:
         virtual ~ast_base_t() = default;
+
+    public:
+        void assign_result_id() const { result_id = ++global_result_id; }
+        void assign_result_id(int existing_result_id) const
+        {
+            result_id = existing_result_id;
+        }
+        /**
+         * @brief `result_id` 表示 Koopa 中临时变量的编号。
+         * 0 表示某个表达式不对应任何运算结果，可能需要使用内联数。
+         */
+        int get_result_id() const { return result_id; }
+
+        /**
+         * @brief `inline_number` 表示 Koopa 中的整数字面量。
+         * 如果一个表达式不应该对应整数字面量，则结果为 0。
+         */
+        virtual int get_inline_number() const { return 0; }
 
     public:
         virtual std::string to_koopa() const = 0;
@@ -111,8 +134,12 @@ namespace compiler::ast
     public:
         std::string to_koopa() const override
         {
-            // TODO: Implement.
-            return "";
+            auto ret = expression->to_koopa();
+            if (int id = expression->get_result_id())
+                return ret + fmt::format("ret %{}\n", id);
+            else
+                return ret +
+                       fmt::format("ret {}\n", expression->get_inline_number());
         }
     };
 
@@ -126,9 +153,17 @@ namespace compiler::ast
         ast_t unary_expression;
 
     public:
+        int get_inline_number() const override
+        {
+            return unary_expression->get_inline_number();
+        }
+
+    public:
         std::string to_koopa() const override
         {
-            return unary_expression->to_koopa();
+            auto ret = unary_expression->to_koopa();
+            assign_result_id(unary_expression->get_result_id());
+            return ret;
         }
     };
 
@@ -142,9 +177,17 @@ namespace compiler::ast
         ast_t primary_expression;
 
     public:
+        int get_inline_number() const override
+        {
+            return primary_expression->get_inline_number();
+        }
+
+    public:
         std::string to_koopa() const override
         {
-            return primary_expression->to_koopa();
+            auto ret = primary_expression->to_koopa();
+            assign_result_id(primary_expression->get_result_id());
+            return ret;
         }
     };
 
@@ -159,10 +202,50 @@ namespace compiler::ast
         ast_t unary_expression;
 
     public:
+        int get_inline_number() const override
+        {
+            return unary_expression->get_inline_number();
+        }
+
+    public:
         std::string to_koopa() const override
         {
-            // TODO: Implement.
-            return "";
+            auto ret = unary_expression->to_koopa();
+            if (false)
+                ;
+            else if (op == "+")
+            {
+                assign_result_id(unary_expression->get_result_id());
+            }
+            else if (op == "-")
+            {
+                assign_result_id();
+                if (int id = unary_expression->get_result_id())
+                {
+                    ret +=
+                        fmt::format("%{} = sub 0, %{}\n", get_result_id(), id);
+                }
+                else
+                {
+                    ret += fmt::format("%{} = sub 0, {}\n", get_result_id(),
+                                       unary_expression->get_inline_number());
+                }
+            }
+            else if (op == "!")
+            {
+                assign_result_id();
+                if (int id = unary_expression->get_result_id())
+                {
+                    ret +=
+                        fmt::format("%{} = eq %{}, 0\n", get_result_id(), id);
+                }
+                else
+                {
+                    ret += fmt::format("%{} = eq {}, 0\n", get_result_id(),
+                                       unary_expression->get_inline_number());
+                }
+            }
+            return ret;
         }
     };
 
@@ -176,7 +259,18 @@ namespace compiler::ast
         ast_t expression;
 
     public:
-        std::string to_koopa() const override { return expression->to_koopa(); }
+        int get_inline_number() const override
+        {
+            return expression->get_inline_number();
+        }
+
+    public:
+        std::string to_koopa() const override
+        {
+            auto ret = expression->to_koopa();
+            assign_result_id(expression->get_result_id());
+            return ret;
+        }
     };
 
     /**
@@ -189,10 +283,9 @@ namespace compiler::ast
         int number;
 
     public:
-        std::string to_koopa() const override
-        {
-            // TODO: Implement.
-            return "";
-        }
+        int get_inline_number() const override { return number; }
+
+    public:
+        std::string to_koopa() const override { return ""; }
     };
 } // namespace compiler::ast
