@@ -101,8 +101,89 @@ namespace compiler::ast
 
     /**
      * @brief AST of a statement.
+     * Stmt ::= "return" Exp ";";
      */
     class ast_statement_t : public ast_base_t
+    {
+    public:
+        ast_t expression;
+
+    public:
+        std::string to_koopa() const override
+        {
+            // TODO: Implement.
+            return "";
+        }
+    };
+
+    /**
+     * @brief AST of an expression.
+     * Exp ::= UnaryExp;
+     */
+    class ast_expression_t : public ast_base_t
+    {
+    public:
+        ast_t unary_expression;
+
+    public:
+        std::string to_koopa() const override
+        {
+            return unary_expression->to_koopa();
+        }
+    };
+
+    /**
+     * @brief AST of a unary expression.
+     * UnaryExp ::= PrimaryExp;
+     */
+    class ast_unary_expression_1_t : public ast_base_t
+    {
+    public:
+        ast_t primary_expression;
+
+    public:
+        std::string to_koopa() const override
+        {
+            return primary_expression->to_koopa();
+        }
+    };
+
+    /**
+     * @brief AST of a unary expression.
+     * UnaryExp ::= UnaryOp UnaryExp;
+     */
+    class ast_unary_expression_2_t : public ast_base_t
+    {
+    public:
+        std::string op;
+        ast_t unary_expression;
+
+    public:
+        std::string to_koopa() const override
+        {
+            // TODO: Implement.
+            return "";
+        }
+    };
+
+    /**
+     * @brief AST of a primary_expression.
+     * PrimaryExp ::= "(" Exp ")";
+     */
+    class ast_primary_expression_1_t : public ast_base_t
+    {
+    public:
+        ast_t expression;
+
+    public:
+        std::string to_koopa() const override { return expression->to_koopa(); }
+    };
+
+    /**
+     * @brief AST of a primary_expression.
+     * PrimaryExp ::= Number;
+     */
+    class ast_primary_expression_2_t : public ast_base_t
     {
     public:
         int number;
@@ -110,7 +191,8 @@ namespace compiler::ast
     public:
         std::string to_koopa() const override
         {
-            return fmt::format("ret {}\n", number);
+            // TODO: Implement.
+            return "";
         }
     };
 } // namespace compiler::ast

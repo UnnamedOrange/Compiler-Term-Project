@@ -85,6 +85,7 @@ void yyerror(ast_t& ast, const char* s);
  */
 
 %type nt_program nt_function nt_function_type nt_block nt_statement nt_number
+%type nt_expression nt_primary_expression nt_unary_expression nt_unary_operator
 
 /* 第三部分：动作 */
 
@@ -121,14 +122,43 @@ nt_block : '{' nt_statement '}' {
     ast_block->statement = std::get<ast_t>($2);
     $$ = ast_block;
 };
-nt_statement : RETURN nt_number ';' {
+nt_statement : RETURN nt_expression ';' {
     auto ast_statement = std::make_shared<ast_statement_t>();
-    ast_statement->number = std::get<int>($2);
+    ast_statement->expression = std::get<ast_t>($2);
     $$ = ast_statement;
 };
 nt_number : INT_LITERAL {
     $$ = $1;
 };
+nt_expression : nt_unary_expression {
+    auto ast_expression = std::make_shared<ast_expression_t>();
+    ast_expression->unary_expression = std::get<ast_t>($1);
+    $$ = ast_expression;
+}
+nt_unary_expression : nt_primary_expression {
+    auto ast_unary_expression = std::make_shared<ast_unary_expression_1_t>();
+    ast_unary_expression->primary_expression = std::get<ast_t>($1);
+    $$ = ast_unary_expression;
+}
+| nt_unary_operator nt_unary_expression {
+    auto ast_unary_expression = std::make_shared<ast_unary_expression_2_t>();
+    ast_unary_expression->op = std::get<string>($1);
+    ast_unary_expression->unary_expression = std::get<ast_t>($2);
+    $$ = ast_unary_expression;
+}
+nt_primary_expression : '(' nt_expression ')' {
+    auto ast_primary_expression = std::make_shared<ast_primary_expression_1_t>();
+    ast_primary_expression->expression = std::get<ast_t>($2);
+    $$ = ast_primary_expression;
+}
+| nt_number {
+    auto ast_primary_expression = std::make_shared<ast_primary_expression_2_t>();
+    ast_primary_expression->number = std::get<int>($1);
+    $$ = ast_primary_expression;
+}
+nt_unary_operator : '+' | '-' | '!' {
+    $$ = $1;
+}
 %%
 
 /* 第四部分：辅助函数 */
