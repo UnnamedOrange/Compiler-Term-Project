@@ -53,7 +53,5 @@ std::string sysy_to_koopa::compile(const std::filesystem::path& input_file_path)
         }
     }
 
-    // TODO: Implement the compiler.
-
-    return "";
+    return ast->to_koopa();
 }

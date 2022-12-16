@@ -12,6 +12,8 @@
 #include <memory>
 #include <string>
 
+#include <fmt/core.h>
+
 namespace compiler::ast
 {
     class ast_base_t;
@@ -22,13 +24,14 @@ namespace compiler::ast
 
     /**
      * @brief AST base class.
-     *
-     * @todo Design member functions.
      */
     class ast_base_t
     {
     public:
         virtual ~ast_base_t() = default;
+
+    public:
+        virtual std::string to_koopa() const = 0;
     };
 
     /**
@@ -38,6 +41,9 @@ namespace compiler::ast
     {
     public:
         ast_t function;
+
+    public:
+        std::string to_koopa() const override { return function->to_koopa(); }
     };
 
     /**
@@ -49,6 +55,16 @@ namespace compiler::ast
         ast_t function_type;
         std::string function_name;
         ast_t block;
+
+    public:
+        std::string to_koopa() const override
+        {
+            return fmt::format(R"(fun @{}(): {} {{
+{}}}
+)",
+                               function_name, function_type->to_koopa(),
+                               block->to_koopa());
+        }
     };
 
     /**
@@ -58,6 +74,14 @@ namespace compiler::ast
     {
     public:
         std::string type_name;
+
+    public:
+        std::string to_koopa() const override
+        {
+            if (type_name == "int")
+                return "i32";
+            return type_name;
+        }
     };
 
     /**
@@ -67,6 +91,12 @@ namespace compiler::ast
     {
     public:
         ast_t statement;
+
+    public:
+        std::string to_koopa() const override
+        {
+            return fmt::format("%entry:\n{}", statement->to_koopa());
+        }
     };
 
     /**
@@ -76,5 +106,11 @@ namespace compiler::ast
     {
     public:
         int number;
+
+    public:
+        std::string to_koopa() const override
+        {
+            return fmt::format("ret {}\n", number);
+        }
     };
 } // namespace compiler::ast
