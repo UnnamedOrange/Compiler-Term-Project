@@ -219,9 +219,29 @@ std::string visit(const koopa_raw_binary_t& binary_inst,
         ret += fmt::format("    seqz {}, {}\n", reg_x, reg_x);
         break;
     }
+    case KOOPA_RBO_ADD:
+    {
+        ret += fmt::format("    add {}, {}, {}\n", reg_x, reg_l, reg_r);
+        break;
+    }
     case KOOPA_RBO_SUB:
     {
         ret += fmt::format("    sub {}, {}, {}\n", reg_x, reg_l, reg_r);
+        break;
+    }
+    case KOOPA_RBO_MUL:
+    {
+        ret += fmt::format("    mul {}, {}, {}\n", reg_x, reg_l, reg_r);
+        break;
+    }
+    case KOOPA_RBO_DIV:
+    {
+        ret += fmt::format("    div {}, {}, {}\n", reg_x, reg_l, reg_r);
+        break;
+    }
+    case KOOPA_RBO_MOD:
+    {
+        ret += fmt::format("    rem {}, {}, {}\n", reg_x, reg_l, reg_r);
         break;
     }
     default:
