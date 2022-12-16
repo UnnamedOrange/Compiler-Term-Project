@@ -145,24 +145,24 @@ namespace compiler::ast
 
     /**
      * @brief AST of an expression.
-     * Exp ::= UnaryExp;
+     * Exp ::= AddExp;
      */
     class ast_expression_t : public ast_base_t
     {
     public:
-        ast_t unary_expression;
+        ast_t add_expression;
 
     public:
         int get_inline_number() const override
         {
-            return unary_expression->get_inline_number();
+            return add_expression->get_inline_number();
         }
 
     public:
         std::string to_koopa() const override
         {
-            auto ret = unary_expression->to_koopa();
-            assign_result_id(unary_expression->get_result_id());
+            auto ret = add_expression->to_koopa();
+            assign_result_id(add_expression->get_result_id());
             return ret;
         }
     };
@@ -287,5 +287,149 @@ namespace compiler::ast
 
     public:
         std::string to_koopa() const override { return ""; }
+    };
+
+    /**
+     * @brief AST of an add expression.
+     * AddExp ::= MulExp;
+     */
+    class ast_add_expression_1_t : public ast_base_t
+    {
+    public:
+        ast_t multiply_expression;
+
+    public:
+        int get_inline_number() const override
+        {
+            return multiply_expression->get_inline_number();
+        }
+
+    public:
+        std::string to_koopa() const override
+        {
+            auto ret = multiply_expression->to_koopa();
+            assign_result_id(multiply_expression->get_result_id());
+            return ret;
+        }
+    };
+
+    /**
+     * @brief AST of an add expression.
+     * AddExp ::= AddExp ("+" | "-") MulExp;
+     */
+    class ast_add_expression_2_t : public ast_base_t
+    {
+    public:
+        ast_t add_expression;
+        std::string op;
+        ast_t multiply_expression;
+
+    public:
+        std::string to_koopa() const override
+        {
+            std::string ret;
+            ret += add_expression->to_koopa();
+            ret += multiply_expression->to_koopa();
+
+            std::string operator_name;
+            std::string operand[2];
+            {
+                if (false)
+                    ;
+                else if (op == "+")
+                    operator_name = "add";
+                else if (op == "-")
+                    operator_name = "sub";
+
+                if (int id = add_expression->get_result_id())
+                    operand[0] = fmt::format("%{}", id);
+                else
+                    operand[0] =
+                        fmt::format("{}", add_expression->get_inline_number());
+                if (int id = multiply_expression->get_result_id())
+                    operand[1] = fmt::format("%{}", id);
+                else
+                    operand[1] = fmt::format(
+                        "{}", multiply_expression->get_inline_number());
+            }
+
+            assign_result_id();
+            ret += fmt::format("%{} = {} {}, {}\n", get_result_id(),
+                               operator_name, operand[0], operand[1]);
+            return ret;
+        }
+    };
+
+    /**
+     * @brief AST of an multiply expression.
+     * MulExp ::= UnaryExp;
+     */
+    class ast_multiply_expression_1_t : public ast_base_t
+    {
+    public:
+        ast_t unary_expression;
+
+    public:
+        int get_inline_number() const override
+        {
+            return unary_expression->get_inline_number();
+        }
+
+    public:
+        std::string to_koopa() const override
+        {
+            auto ret = unary_expression->to_koopa();
+            assign_result_id(unary_expression->get_result_id());
+            return ret;
+        }
+    };
+
+    /**
+     * @brief AST of an multiply expression.
+     * MulExp ::= MulExp ("*" | "/" | "%") UnaryExp;
+     */
+    class ast_multiply_expression_2_t : public ast_base_t
+    {
+    public:
+        ast_t multiply_expression;
+        std::string op;
+        ast_t unary_expression;
+
+    public:
+        std::string to_koopa() const override
+        {
+            std::string ret;
+            ret += multiply_expression->to_koopa();
+            ret += unary_expression->to_koopa();
+
+            std::string operator_name;
+            std::string operand[2];
+            {
+                if (false)
+                    ;
+                else if (op == "*")
+                    operator_name = "mul";
+                else if (op == "/")
+                    operator_name = "div";
+                else if (op == "%")
+                    operator_name = "mod";
+
+                if (int id = multiply_expression->get_result_id())
+                    operand[0] = fmt::format("%{}", id);
+                else
+                    operand[0] = fmt::format(
+                        "{}", multiply_expression->get_inline_number());
+                if (int id = unary_expression->get_result_id())
+                    operand[1] = fmt::format("%{}", id);
+                else
+                    operand[1] = fmt::format(
+                        "{}", unary_expression->get_inline_number());
+            }
+
+            assign_result_id();
+            ret += fmt::format("%{} = {} {}, {}\n", get_result_id(),
+                               operator_name, operand[0], operand[1]);
+            return ret;
+        }
     };
 } // namespace compiler::ast

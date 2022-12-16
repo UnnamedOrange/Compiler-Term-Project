@@ -86,6 +86,7 @@ void yyerror(ast_t& ast, const char* s);
 
 %type nt_program nt_function nt_function_type nt_block nt_statement nt_number
 %type nt_expression nt_primary_expression nt_unary_expression nt_unary_operator
+%type nt_multiply_expression nt_multiply_operator nt_add_expression nt_add_operator
 
 /* 第三部分：动作 */
 
@@ -130,9 +131,9 @@ nt_statement : RETURN nt_expression ';' {
 nt_number : INT_LITERAL {
     $$ = $1;
 };
-nt_expression : nt_unary_expression {
+nt_expression : nt_add_expression {
     auto ast_expression = std::make_shared<ast_expression_t>();
-    ast_expression->unary_expression = std::get<ast_t>($1);
+    ast_expression->add_expression = std::get<ast_t>($1);
     $$ = ast_expression;
 }
 nt_unary_expression : nt_primary_expression {
@@ -157,6 +158,36 @@ nt_primary_expression : '(' nt_expression ')' {
     $$ = ast_primary_expression;
 }
 nt_unary_operator : '+' | '-' | '!' {
+    $$ = $1;
+}
+nt_multiply_expression : nt_unary_expression {
+    auto ast_multiply_expression = std::make_shared<ast_multiply_expression_1_t>();
+    ast_multiply_expression->unary_expression = std::get<ast_t>($1);
+    $$ = ast_multiply_expression;
+}
+| nt_multiply_expression nt_multiply_operator nt_unary_expression {
+    auto ast_multiply_expression = std::make_shared<ast_multiply_expression_2_t>();
+    ast_multiply_expression->multiply_expression = std::get<ast_t>($1);
+    ast_multiply_expression->op = std::get<string>($2);
+    ast_multiply_expression->unary_expression = std::get<ast_t>($3);
+    $$ = ast_multiply_expression;
+}
+nt_multiply_operator : '*' | '/' | '%' {
+    $$ = $1;
+}
+nt_add_expression : nt_multiply_expression {
+    auto ast_add_expression = std::make_shared<ast_add_expression_1_t>();
+    ast_add_expression->multiply_expression = std::get<ast_t>($1);
+    $$ = ast_add_expression;
+}
+| nt_add_expression nt_add_operator nt_multiply_expression {
+    auto ast_add_expression = std::make_shared<ast_add_expression_2_t>();
+    ast_add_expression->add_expression = std::get<ast_t>($1);
+    ast_add_expression->op = std::get<string>($2);
+    ast_add_expression->multiply_expression = std::get<ast_t>($3);
+    $$ = ast_add_expression;
+}
+nt_add_operator : '+' | '-' {
     $$ = $1;
 }
 %%
