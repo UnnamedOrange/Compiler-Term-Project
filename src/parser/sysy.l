@@ -60,6 +60,16 @@ Hexadecimal   0[xX][0-9a-fA-F]+
 "int"           { return INT; }
 "return"        { return RETURN; }
 
+"<"             { yylval = std::string(yytext); return LT; }
+">"             { yylval = std::string(yytext); return GT; }
+"<="            { yylval = std::string(yytext); return LE; }
+">="            { yylval = std::string(yytext); return GE; }
+"=="            { yylval = std::string(yytext); return EQ; }
+"!="            { yylval = std::string(yytext); return NE; }
+
+"&&"            { yylval = std::string(yytext); return LAND; }
+"||"            { yylval = std::string(yytext); return LOR; }
+
 {Identifier}    { yylval = std::string(yytext); return IDENTIFIER; }
 
 {Decimal}       { yylval = std::strtol(yytext, nullptr, 0); return INT_LITERAL; }

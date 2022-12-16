@@ -74,6 +74,8 @@ void yyerror(ast_t& ast, const char* s);
 %token INT RETURN
 %token IDENTIFIER
 %token INT_LITERAL
+%token LT GT LE GE EQ NE
+%token LAND LOR
 
 /* 第二部分（四）：非终结符类型定义 */
 
@@ -87,6 +89,10 @@ void yyerror(ast_t& ast, const char* s);
 %type nt_program nt_function nt_function_type nt_block nt_statement nt_number
 %type nt_expression nt_primary_expression nt_unary_expression nt_unary_operator
 %type nt_multiply_expression nt_multiply_operator nt_add_expression nt_add_operator
+%type nt_relation_expression nt_relation_operator
+%type nt_equation_expression nt_equation_operator
+%type nt_land_expression
+%type nt_lor_expression
 
 /* 第三部分：动作 */
 
@@ -131,9 +137,9 @@ nt_statement : RETURN nt_expression ';' {
 nt_number : INT_LITERAL {
     $$ = $1;
 };
-nt_expression : nt_add_expression {
+nt_expression : nt_lor_expression {
     auto ast_expression = std::make_shared<ast_expression_t>();
-    ast_expression->add_expression = std::get<ast_t>($1);
+    ast_expression->lor_expression = std::get<ast_t>($1);
     $$ = ast_expression;
 }
 nt_unary_expression : nt_primary_expression {
@@ -189,6 +195,58 @@ nt_add_expression : nt_multiply_expression {
 }
 nt_add_operator : '+' | '-' {
     $$ = $1;
+}
+nt_relation_expression : nt_add_expression {
+    auto ast_relation_expression = std::make_shared<ast_relation_expression_1_t>();
+    ast_relation_expression->add_expression = std::get<ast_t>($1);
+    $$ = ast_relation_expression;
+}
+| nt_relation_expression nt_relation_operator nt_add_expression {
+    auto ast_relation_expression = std::make_shared<ast_relation_expression_2_t>();
+    ast_relation_expression->relation_expression = std::get<ast_t>($1);
+    ast_relation_expression->op = std::get<string>($2);
+    ast_relation_expression->add_expression = std::get<ast_t>($3);
+    $$ = ast_relation_expression;
+}
+nt_relation_operator : LT | GT | LE | GE {
+    $$ = $1;
+}
+nt_equation_expression : nt_relation_expression {
+    auto ast_equation_expression = std::make_shared<ast_equation_expression_1_t>();
+    ast_equation_expression->relation_expression = std::get<ast_t>($1);
+    $$ = ast_equation_expression;
+}
+| nt_equation_expression nt_equation_operator nt_relation_expression {
+    auto ast_equation_expression = std::make_shared<ast_equation_expression_2_t>();
+    ast_equation_expression->equation_expression = std::get<ast_t>($1);
+    ast_equation_expression->op = std::get<string>($2);
+    ast_equation_expression->relation_expression = std::get<ast_t>($3);
+    $$ = ast_equation_expression;
+}
+nt_equation_operator : EQ | NE {
+    $$ = $1;
+}
+nt_land_expression : nt_equation_expression {
+    auto ast_land_expression = std::make_shared<ast_land_expression_1_t>();
+    ast_land_expression->equation_expression = std::get<ast_t>($1);
+    $$ = ast_land_expression;
+}
+| nt_land_expression LAND nt_equation_expression {
+    auto ast_land_expression = std::make_shared<ast_land_expression_2_t>();
+    ast_land_expression->land_expression = std::get<ast_t>($1);
+    ast_land_expression->equation_expression = std::get<ast_t>($3);
+    $$ = ast_land_expression;
+}
+nt_lor_expression : nt_land_expression {
+    auto ast_lor_expression = std::make_shared<ast_lor_expression_1_t>();
+    ast_lor_expression->land_expression = std::get<ast_t>($1);
+    $$ = ast_lor_expression;
+}
+| nt_lor_expression LOR nt_land_expression {
+    auto ast_lor_expression = std::make_shared<ast_lor_expression_2_t>();
+    ast_lor_expression->lor_expression = std::get<ast_t>($1);
+    ast_lor_expression->land_expression = std::get<ast_t>($3);
+    $$ = ast_lor_expression;
 }
 %%
 
