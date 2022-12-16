@@ -24,7 +24,7 @@ using namespace compiler::ast;
 
 #include <variant>
 using string = std::string;
-using symbol_type = std::variant<ast_t, int, double, string>;
+using symbol_type = std::variant<ast_t, string, int>;
 
 #define YYSTYPE symbol_type
 
@@ -71,7 +71,9 @@ void yyerror(ast_t& ast, const char* s);
  * %token <<<类型>>> { <终结符枚举名> ... } // 类型在 union 中定义。
  */
 
-%token INT
+%token INT RETURN
+%token IDENTIFIER
+%token INT_LITERAL
 
 /* 第二部分（四）：非终结符类型定义 */
 
@@ -82,6 +84,8 @@ void yyerror(ast_t& ast, const char* s);
  * 如果使用默认类型，则可省略。
  */
 
+%type nt_program nt_function nt_function_type nt_block nt_statement nt_number
+
 /* 第三部分：动作 */
 
 /* 形如：
@@ -91,11 +95,39 @@ void yyerror(ast_t& ast, const char* s);
  */
 
 %%
-nt_program : INT {
+nt_program : nt_function {
     // 样例：
     // symbol_type s_int = $1;
     // $$ = std::make_shared<ast_program_t>();
     // ast = std::move(std::get<ast_t>($$));
+    auto ast_temp = std::make_shared<ast_program_t>();
+    ast_temp->function = std::get<ast_t>($1);
+    ast = std::move(ast_temp); // See parse-param.
+};
+nt_function : nt_function_type IDENTIFIER '(' ')' nt_block {
+    auto ast_function = std::make_shared<ast_function_t>();
+    ast_function->function_type = std::get<ast_t>($1);
+    ast_function->function_name = std::get<string>($2);
+    ast_function->block = std::get<ast_t>($5);
+    $$ = ast_function;
+};
+nt_function_type : INT {
+    auto ast_function_type = std::make_shared<ast_function_type_t>();
+    ast_function_type->type_name = "int";
+    $$ = ast_function_type;
+};
+nt_block : '{' nt_statement '}' {
+    auto ast_block = std::make_shared<ast_block_t>();
+    ast_block->statement = std::get<ast_t>($2);
+    $$ = ast_block;
+};
+nt_statement : RETURN nt_number ';' {
+    auto ast_statement = std::make_shared<ast_statement_t>();
+    ast_statement->number = std::get<int>($2);
+    $$ = ast_statement;
+};
+nt_number : INT_LITERAL {
+    $$ = $1;
 };
 %%
 

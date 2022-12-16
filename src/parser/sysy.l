@@ -14,6 +14,9 @@
 
 /* 第一部分：C++ 开头程序 */
 %{
+#include <cstdlib>
+#include <string>
+
 #include "sysy.tab.hpp" // 使用 Bison 中关于 token 的定义。
 %}
 
@@ -29,6 +32,16 @@
  * <名字> <正则表达式>
  */
 
+WhiteSpace    [ \t\n\r]*
+LineComment   "//".*
+BlockComment  "/\*"([^*]|\*+[^*/])*\*+"/"
+
+Identifier    [a-zA-Z_][a-zA-Z0-9_]*
+
+Decimal       [1-9][0-9]*
+Octal         0[0-7]*
+Hexadecimal   0[xX][0-9a-fA-F]+
+
 /* 第二部分（二）：动作 */
 
 /* 形如：
@@ -39,6 +52,22 @@
  */
 
 %%
+
+{WhiteSpace}    { /* 忽略, 不做任何操作 */ }
+{LineComment}   { /* 忽略, 不做任何操作 */ }
+{BlockComment}  { /* 忽略, 不做任何操作 */ }
+
+"int"           { return INT; }
+"return"        { return RETURN; }
+
+{Identifier}    { yylval = std::string(yytext); return IDENTIFIER; }
+
+{Decimal}       { yylval = std::strtol(yytext, nullptr, 0); return INT_LITERAL; }
+{Octal}         { yylval = std::strtol(yytext, nullptr, 0); return INT_LITERAL; }
+{Hexadecimal}   { yylval = std::strtol(yytext, nullptr, 0); return INT_LITERAL; }
+
+.               { return yytext[0]; }
+
 %%
 
 /* 第三部分：辅助函数 */

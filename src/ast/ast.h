@@ -10,6 +10,7 @@
 #pragma once
 
 #include <memory>
+#include <string>
 
 namespace compiler::ast
 {
@@ -32,10 +33,48 @@ namespace compiler::ast
 
     /**
      * @brief AST of a complete program.
-     *
-     * @todo Design member variables.
      */
     class ast_program_t : public ast_base_t
     {
+    public:
+        ast_t function;
+    };
+
+    /**
+     * @brief AST of a function.
+     */
+    class ast_function_t : public ast_base_t
+    {
+    public:
+        ast_t function_type;
+        std::string function_name;
+        ast_t block;
+    };
+
+    /**
+     * @brief AST of a function type.
+     */
+    class ast_function_type_t : public ast_base_t
+    {
+    public:
+        std::string type_name;
+    };
+
+    /**
+     * @brief AST of a block.
+     */
+    class ast_block_t : public ast_base_t
+    {
+    public:
+        ast_t statement;
+    };
+
+    /**
+     * @brief AST of a statement.
+     */
+    class ast_statement_t : public ast_base_t
+    {
+    public:
+        int number;
     };
 } // namespace compiler::ast
