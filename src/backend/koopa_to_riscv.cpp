@@ -9,8 +9,12 @@
 
 #include "koopa_to_riscv.h"
 
+#include <array>
 #include <cassert>
 #include <iostream>
+#include <map>
+#include <stdexcept>
+#include <vector>
 
 #include <fmt/core.h>
 
@@ -19,6 +23,46 @@
 #endif
 
 using namespace compiler;
+
+class register_manager
+{
+private:
+    inline static constexpr std::array reg_names = {
+        "t0", "t1", "t2", "t3", "t4", "t5", "t6",
+        // "a0", // 用于返回值。
+        "a1", "a2", "a3", "a4", "a5",
+        // "a6", "a7", // 用于立即数。
+    };
+    std::array<std::vector<koopa_raw_value_t>, reg_names.size()> var_by_reg;
+    std::map<koopa_raw_value_t, size_t> reg_by_var;
+
+private:
+    size_t random_vacant_reg() const
+    {
+        for (size_t i = 0; i < reg_names.size(); i++)
+            if (var_by_reg[i].empty())
+                return i;
+        throw std::runtime_error("[Error] No vacant register.");
+    }
+
+public:
+    std::string get_reg(koopa_raw_value_t x1)
+    {
+        // 暂时直接分配寄存器，不考虑寄存器不够的情况。
+        if (!reg_by_var.count(x1))
+        {
+            int reg = random_vacant_reg();
+            var_by_reg[reg].push_back(x1);
+            reg_by_var[x1] = reg;
+        }
+        return operator[](x1);
+    }
+    std::string operator[](koopa_raw_value_t var_name) const
+    {
+        return reg_names[reg_by_var.at(var_name)];
+    }
+};
+register_manager rm;
 
 #if defined(COMPILER_LINK_KOOPA)
 
@@ -29,6 +73,7 @@ std::string visit(const koopa_raw_function_t&);
 std::string visit(const koopa_raw_basic_block_t&);
 std::string visit(const koopa_raw_value_t&);
 std::string visit(const koopa_raw_return_t&);
+std::string visit(const koopa_raw_binary_t&, const koopa_raw_value_t&);
 
 std::string to_riscv(const std::string& koopa)
 {
@@ -111,6 +156,10 @@ std::string visit(const koopa_raw_value_t& value)
         // 访问 return 指令。
         ret += visit(kind.data.ret);
         break;
+    case KOOPA_RVT_BINARY:
+        // 访问 binary 指令。
+        ret += visit(kind.data.binary, value);
+        break;
     case KOOPA_RVT_INTEGER:
         // 访问 integer 指令。
         // ret += visit(kind.data.integer);
@@ -123,8 +172,63 @@ std::string visit(const koopa_raw_value_t& value)
 }
 std::string visit(const koopa_raw_return_t& return_inst)
 {
-    return fmt::format("    li a0, {}\n    ret\n",
-                       return_inst.value->kind.data.integer.value);
+    std::string ret;
+    if (return_inst.value->kind.tag == KOOPA_RVT_INTEGER)
+        ret += fmt::format("    li a0, {}\n    ret\n",
+                           return_inst.value->kind.data.integer.value);
+    else
+    {
+        std::string reg_y = rm.get_reg(return_inst.value);
+        ret += fmt::format("    mv a0, {}\n    ret\n", reg_y);
+    }
+    return ret;
+}
+std::string visit(const koopa_raw_binary_t& binary_inst,
+                  const koopa_raw_value_t& parent_value)
+{
+    std::string ret;
+    std::string reg_l = "a6";
+    std::string reg_r = "a7";
+    if (binary_inst.lhs->kind.tag == KOOPA_RVT_INTEGER)
+    {
+        int value = binary_inst.lhs->kind.data.integer.value;
+        if (value)
+            ret += fmt::format("    li {}, {}\n", reg_l, value);
+        else
+            reg_l = "x0";
+    }
+    else
+        reg_l = rm.get_reg(binary_inst.lhs);
+    if (binary_inst.rhs->kind.tag == KOOPA_RVT_INTEGER)
+    {
+        int value = binary_inst.rhs->kind.data.integer.value;
+        if (value)
+            ret += fmt::format("    li {}, {}\n", reg_r, value);
+        else
+            reg_r = "x0";
+    }
+    else
+        reg_r = rm.get_reg(binary_inst.rhs);
+    std::string reg_x = rm.get_reg(parent_value);
+
+    switch (binary_inst.op)
+    {
+    case KOOPA_RBO_EQ:
+    {
+        ret += fmt::format("    xor {}, {}, {}\n", reg_x, reg_l, reg_r);
+        ret += fmt::format("    seqz {}, {}\n", reg_x, reg_x);
+        break;
+    }
+    case KOOPA_RBO_SUB:
+    {
+        ret += fmt::format("    sub {}, {}, {}\n", reg_x, reg_l, reg_r);
+        break;
+    }
+    default:
+        // 其他类型暂时遇不到。
+        assert(false);
+    }
+    return ret;
 }
 
 std::string koopa_to_riscv::compile(const std::string& koopa_ir_str)
