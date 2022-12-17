@@ -73,9 +73,9 @@ Hexadecimal   0[xX][0-9a-fA-F]+
 
 {Identifier}    { yylval = std::string(yytext); return IDENTIFIER; }
 
-{Decimal}       { yylval = std::strtol(yytext, nullptr, 0); return INT_LITERAL; }
-{Octal}         { yylval = std::strtol(yytext, nullptr, 0); return INT_LITERAL; }
-{Hexadecimal}   { yylval = std::strtol(yytext, nullptr, 0); return INT_LITERAL; }
+{Decimal}       { yylval = static_cast<int>(std::strtol(yytext, nullptr, 0)); return INT_LITERAL; }
+{Octal}         { yylval = static_cast<int>(std::strtol(yytext, nullptr, 0)); return INT_LITERAL; }
+{Hexadecimal}   { yylval = static_cast<int>(std::strtol(yytext, nullptr, 0)); return INT_LITERAL; }
 
 .               { yylval = std::string(yytext); return yytext[0]; }
 
