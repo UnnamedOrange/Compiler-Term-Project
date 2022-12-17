@@ -24,6 +24,8 @@
 
 using namespace compiler;
 
+#if defined(COMPILER_LINK_KOOPA)
+
 class register_manager
 {
 private:
@@ -63,8 +65,6 @@ public:
     }
 };
 register_manager rm;
-
-#if defined(COMPILER_LINK_KOOPA)
 
 std::string to_riscv(const std::string&);
 std::string visit(const koopa_raw_program_t&);
