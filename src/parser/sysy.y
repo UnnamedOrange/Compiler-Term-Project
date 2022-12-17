@@ -323,7 +323,7 @@ nt_const_definition_list : nt_const_definition {
 nt_const_definition : IDENTIFIER '=' nt_const_initial_value {
     auto ast_const_definition = std::make_shared<ast_const_definition_t>();
     ast_const_definition->raw_name = std::get<string>($1);
-    ast_const_definition->value = *std::get<ast_t>($3)->get_inline_number();
+    ast_const_definition->const_initial_value = std::get<ast_t>($3);
     $$ = ast_const_definition;
 }
 nt_const_initial_value : nt_const_expression {

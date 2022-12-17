@@ -953,13 +953,13 @@ namespace compiler::ast
     {
     public:
         std::string raw_name;
-        int value;
+        ast_t const_initial_value;
 
     public:
         std::string to_koopa() const override
         {
             symbol_const_t symbol;
-            symbol.value = value;
+            symbol.value = *const_initial_value->get_inline_number();
             st.insert(raw_name, std::move(symbol));
             return "";
         }
