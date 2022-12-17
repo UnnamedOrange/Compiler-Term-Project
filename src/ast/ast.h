@@ -179,12 +179,15 @@ namespace compiler::ast
     public:
         std::string to_koopa() const override
         {
-            auto ret = expression->to_koopa();
-            if (int id = expression->get_result_id())
-                return ret + fmt::format("ret %{}\n", id);
+            std::string ret;
+            if (auto const_value = expression->get_inline_number())
+                ret += fmt::format("ret {}\n", *const_value);
             else
-                return ret + fmt::format("ret {}\n",
-                                         *expression->get_inline_number());
+            {
+                ret += expression->to_koopa();
+                ret += fmt::format("ret %{}\n", expression->get_result_id());
+            }
+            return ret;
         }
     };
 
