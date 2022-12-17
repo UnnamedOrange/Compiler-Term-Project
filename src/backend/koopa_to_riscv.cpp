@@ -244,6 +244,49 @@ std::string visit(const koopa_raw_binary_t& binary_inst,
         ret += fmt::format("    rem {}, {}, {}\n", reg_x, reg_l, reg_r);
         break;
     }
+    case KOOPA_RBO_LT:
+    {
+        ret += fmt::format("    slt {}, {}, {}\n", reg_x, reg_l, reg_r);
+        break;
+    }
+    case KOOPA_RBO_GT:
+    {
+        ret += fmt::format("    sgt {}, {}, {}\n", reg_x, reg_l, reg_r);
+        break;
+    }
+    case KOOPA_RBO_LE:
+    {
+        ret += fmt::format("    sgt {}, {}, {}\n", reg_x, reg_l, reg_r);
+        ret += fmt::format("    seqz {}, {}\n", reg_x, reg_x);
+        break;
+    }
+    case KOOPA_RBO_GE:
+    {
+        ret += fmt::format("    slt {}, {}, {}\n", reg_x, reg_l, reg_r);
+        ret += fmt::format("    seqz {}, {}\n", reg_x, reg_x);
+        break;
+    }
+    case KOOPA_RBO_NOT_EQ:
+    {
+        ret += fmt::format("    xor {}, {}, {}\n", reg_x, reg_l, reg_r);
+        ret += fmt::format("    snez {}, {}\n", reg_x, reg_x);
+        break;
+    }
+    case KOOPA_RBO_AND:
+    {
+        ret += fmt::format("    and {}, {}, {}\n", reg_x, reg_l, reg_r);
+        break;
+    }
+    case KOOPA_RBO_OR:
+    {
+        ret += fmt::format("    or {}, {}, {}\n", reg_x, reg_l, reg_r);
+        break;
+    }
+    case KOOPA_RBO_XOR:
+    {
+        ret += fmt::format("    xor {}, {}, {}\n", reg_x, reg_l, reg_r);
+        break;
+    }
     default:
         // 其他类型暂时遇不到。
         assert(false);
