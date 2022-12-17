@@ -169,6 +169,46 @@ namespace compiler::ast
     };
 
     /**
+     * @brief AST of a primary_expression.
+     * PrimaryExp ::= "(" Exp ")";
+     */
+    class ast_primary_expression_1_t : public ast_base_t
+    {
+    public:
+        ast_t expression;
+
+    public:
+        int get_inline_number() const override
+        {
+            return expression->get_inline_number();
+        }
+
+    public:
+        std::string to_koopa() const override
+        {
+            auto ret = expression->to_koopa();
+            assign_result_id(expression->get_result_id());
+            return ret;
+        }
+    };
+
+    /**
+     * @brief AST of a primary_expression.
+     * PrimaryExp ::= Number;
+     */
+    class ast_primary_expression_2_t : public ast_base_t
+    {
+    public:
+        int number;
+
+    public:
+        int get_inline_number() const override { return number; }
+
+    public:
+        std::string to_koopa() const override { return ""; }
+    };
+
+    /**
      * @brief AST of a unary expression.
      * UnaryExp ::= PrimaryExp;
      */
@@ -248,46 +288,6 @@ namespace compiler::ast
             }
             return ret;
         }
-    };
-
-    /**
-     * @brief AST of a primary_expression.
-     * PrimaryExp ::= "(" Exp ")";
-     */
-    class ast_primary_expression_1_t : public ast_base_t
-    {
-    public:
-        ast_t expression;
-
-    public:
-        int get_inline_number() const override
-        {
-            return expression->get_inline_number();
-        }
-
-    public:
-        std::string to_koopa() const override
-        {
-            auto ret = expression->to_koopa();
-            assign_result_id(expression->get_result_id());
-            return ret;
-        }
-    };
-
-    /**
-     * @brief AST of a primary_expression.
-     * PrimaryExp ::= Number;
-     */
-    class ast_primary_expression_2_t : public ast_base_t
-    {
-    public:
-        int number;
-
-    public:
-        int get_inline_number() const override { return number; }
-
-    public:
-        std::string to_koopa() const override { return ""; }
     };
 
     /**

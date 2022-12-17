@@ -87,8 +87,10 @@ void yyerror(ast_t& ast, const char* s);
  */
 
 %type nt_program nt_function nt_function_type nt_block nt_statement nt_number
-%type nt_expression nt_primary_expression nt_unary_expression nt_unary_operator
-%type nt_multiply_expression nt_multiply_operator nt_add_expression nt_add_operator
+%type nt_expression nt_primary_expression
+%type nt_unary_expression nt_unary_operator
+%type nt_multiply_expression nt_multiply_operator
+%type nt_add_expression nt_add_operator
 %type nt_relation_expression nt_relation_operator
 %type nt_equation_expression nt_equation_operator
 %type nt_land_expression
@@ -142,6 +144,16 @@ nt_expression : nt_lor_expression {
     ast_expression->lor_expression = std::get<ast_t>($1);
     $$ = ast_expression;
 }
+nt_primary_expression : '(' nt_expression ')' {
+    auto ast_primary_expression = std::make_shared<ast_primary_expression_1_t>();
+    ast_primary_expression->expression = std::get<ast_t>($2);
+    $$ = ast_primary_expression;
+}
+| nt_number {
+    auto ast_primary_expression = std::make_shared<ast_primary_expression_2_t>();
+    ast_primary_expression->number = std::get<int>($1);
+    $$ = ast_primary_expression;
+}
 nt_unary_expression : nt_primary_expression {
     auto ast_unary_expression = std::make_shared<ast_unary_expression_1_t>();
     ast_unary_expression->primary_expression = std::get<ast_t>($1);
@@ -152,16 +164,6 @@ nt_unary_expression : nt_primary_expression {
     ast_unary_expression->op = std::get<string>($1);
     ast_unary_expression->unary_expression = std::get<ast_t>($2);
     $$ = ast_unary_expression;
-}
-nt_primary_expression : '(' nt_expression ')' {
-    auto ast_primary_expression = std::make_shared<ast_primary_expression_1_t>();
-    ast_primary_expression->expression = std::get<ast_t>($2);
-    $$ = ast_primary_expression;
-}
-| nt_number {
-    auto ast_primary_expression = std::make_shared<ast_primary_expression_2_t>();
-    ast_primary_expression->number = std::get<int>($1);
-    $$ = ast_primary_expression;
 }
 nt_unary_operator : '+' | '-' | '!' {
     $$ = $1;

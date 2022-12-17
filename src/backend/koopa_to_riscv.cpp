@@ -213,12 +213,6 @@ std::string visit(const koopa_raw_binary_t& binary_inst,
 
     switch (binary_inst.op)
     {
-    case KOOPA_RBO_EQ:
-    {
-        ret += fmt::format("    xor {}, {}, {}\n", reg_x, reg_l, reg_r);
-        ret += fmt::format("    seqz {}, {}\n", reg_x, reg_x);
-        break;
-    }
     case KOOPA_RBO_ADD:
     {
         ret += fmt::format("    add {}, {}, {}\n", reg_x, reg_l, reg_r);
@@ -263,6 +257,12 @@ std::string visit(const koopa_raw_binary_t& binary_inst,
     case KOOPA_RBO_GE:
     {
         ret += fmt::format("    slt {}, {}, {}\n", reg_x, reg_l, reg_r);
+        ret += fmt::format("    seqz {}, {}\n", reg_x, reg_x);
+        break;
+    }
+    case KOOPA_RBO_EQ:
+    {
+        ret += fmt::format("    xor {}, {}, {}\n", reg_x, reg_l, reg_r);
         ret += fmt::format("    seqz {}, {}\n", reg_x, reg_x);
         break;
     }
