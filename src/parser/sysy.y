@@ -314,10 +314,10 @@ nt_const_definition_list : nt_const_definition {
     ast_const_definition_list->const_definition = std::get<ast_t>($1);
     $$ = ast_const_definition_list;
 }
-| nt_const_definition nt_const_definition_list {
+| nt_const_definition ',' nt_const_definition_list {
     auto ast_const_definition_list = std::make_shared<ast_const_definition_list_t>();
     ast_const_definition_list->const_definition = std::get<ast_t>($1);
-    ast_const_definition_list->const_definition_list = std::dynamic_pointer_cast<ast_const_definition_list_t>(std::get<ast_t>($2));
+    ast_const_definition_list->const_definition_list = std::dynamic_pointer_cast<ast_const_definition_list_t>(std::get<ast_t>($3));
     $$ = ast_const_definition_list;
 }
 nt_const_definition : IDENTIFIER '=' nt_const_initial_value {
