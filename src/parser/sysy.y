@@ -317,7 +317,9 @@ nt_const_declaration : CONST nt_base_type nt_const_definition_list ';' {
     auto current_list = std::dynamic_pointer_cast<ast_const_definition_list_t>(std::get<ast_t>($3));
     while (current_list)
     {
-        ast_const_definition->const_definitions.push_back(std::move(current_list->const_definition));
+        auto def = std::dynamic_pointer_cast<ast_const_definition_t>(std::move(current_list->const_definition));
+        def->base_type = std::dynamic_pointer_cast<ast_base_type_t>(ast_const_definition->base_type);
+        ast_const_definition->const_definitions.push_back(std::move(def));
         current_list = current_list->const_definition_list;
     }
     $$ = ast_const_definition;
@@ -355,7 +357,9 @@ nt_variable_declaration : nt_base_type nt_variable_definition_list ';' {
     auto current_list = std::dynamic_pointer_cast<ast_variable_definition_list_t>(std::get<ast_t>($2));
     while (current_list)
     {
-        ast_variable_definition->variable_definitions.push_back(std::move(current_list->variable_definition));
+        auto def = std::dynamic_pointer_cast<ast_variable_definition_t>(std::move(current_list->variable_definition));
+        def->base_type = std::dynamic_pointer_cast<ast_base_type_t>(ast_variable_definition->base_type);
+        ast_variable_definition->variable_definitions.push_back(std::move(def));
         current_list = current_list->variable_definition_list;
     }
     $$ = ast_variable_definition;

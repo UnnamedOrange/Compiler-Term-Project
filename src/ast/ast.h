@@ -990,6 +990,7 @@ namespace compiler::ast
     class ast_const_definition_t : public ast_base_t
     {
     public:
+        std::shared_ptr<ast_base_type_t> base_type;
         std::string raw_name;
         ast_t const_initial_value;
 
@@ -1083,13 +1084,21 @@ namespace compiler::ast
 
     /**
      * @brief AST of a variable definition.
-     * VarDef ::= IDENT;
+     * Base class holding the type and name.
      */
-    class ast_variable_definition_1_t : public ast_base_t
+    class ast_variable_definition_t : public ast_base_t
     {
     public:
+        std::shared_ptr<ast_base_type_t> base_type;
         std::string raw_name;
+    };
 
+    /**
+     * @brief AST of a variable definition.
+     * VarDef ::= IDENT;
+     */
+    class ast_variable_definition_1_t : public ast_variable_definition_t
+    {
     public:
         std::string to_koopa() const override
         {
@@ -1103,10 +1112,9 @@ namespace compiler::ast
      * @brief AST of a variable definition.
      * VarDef ::= IDENT "=" InitVal;
      */
-    class ast_variable_definition_2_t : public ast_base_t
+    class ast_variable_definition_2_t : public ast_variable_definition_t
     {
     public:
-        std::string raw_name;
         ast_t initial_value;
 
     public:
