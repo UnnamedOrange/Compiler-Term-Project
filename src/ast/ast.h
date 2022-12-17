@@ -341,33 +341,34 @@ namespace compiler::ast
     public:
         std::string to_koopa() const override
         {
-            auto ret = unary_expression->to_koopa();
-            if (op == "+")
-                assign_result_id(unary_expression->get_result_id());
+            std::string ret;
+
+            std::string operator_name;
+            std::string operand[2];
+
+            operand[0] = "0";
+
+            if (auto const_value = unary_expression->get_inline_number())
+                operand[1] = std::to_string(*const_value);
             else
             {
-                std::string operator_name;
-                std::string operand[2];
-                {
-                    if (false)
-                        ;
-                    else if (op == "-")
-                        operator_name = "sub";
-                    else if (op == "!")
-                        operator_name = "eq";
-
-                    operand[0] = "0";
-                    if (int id = unary_expression->get_result_id())
-                        operand[1] = fmt::format("%{}", id);
-                    else
-                        operand[1] = fmt::format(
-                            "{}", *unary_expression->get_inline_number());
-                }
-
-                assign_result_id();
-                ret += fmt::format("%{} = {} {}, {}\n", get_result_id(),
-                                   operator_name, operand[0], operand[1]);
+                ret += unary_expression->to_koopa();
+                operand[1] =
+                    fmt::format("%{}", unary_expression->get_result_id());
             }
+
+            if (false)
+                ;
+            else if (op == "+")
+                operator_name = "add";
+            else if (op == "-")
+                operator_name = "sub";
+            else if (op == "!")
+                operator_name = "eq";
+
+            assign_result_id();
+            ret += fmt::format("%{} = {} {}, {}\n", get_result_id(),
+                               operator_name, operand[0], operand[1]);
             return ret;
         }
     };
@@ -431,32 +432,36 @@ namespace compiler::ast
         std::string to_koopa() const override
         {
             std::string ret;
-            ret += multiply_expression->to_koopa();
-            ret += unary_expression->to_koopa();
 
             std::string operator_name;
             std::string operand[2];
-            {
-                if (false)
-                    ;
-                else if (op == "*")
-                    operator_name = "mul";
-                else if (op == "/")
-                    operator_name = "div";
-                else if (op == "%")
-                    operator_name = "mod";
 
-                if (int id = multiply_expression->get_result_id())
-                    operand[0] = fmt::format("%{}", id);
-                else
-                    operand[0] = fmt::format(
-                        "{}", *multiply_expression->get_inline_number());
-                if (int id = unary_expression->get_result_id())
-                    operand[1] = fmt::format("%{}", id);
-                else
-                    operand[1] = fmt::format(
-                        "{}", *unary_expression->get_inline_number());
+            if (auto const_value = multiply_expression->get_inline_number())
+                operand[0] = std::to_string(*const_value);
+            else
+            {
+                ret += multiply_expression->to_koopa();
+                operand[0] =
+                    fmt::format("%{}", multiply_expression->get_result_id());
             }
+
+            if (auto const_value = unary_expression->get_inline_number())
+                operand[1] = std::to_string(*const_value);
+            else
+            {
+                ret += unary_expression->to_koopa();
+                operand[1] =
+                    fmt::format("%{}", unary_expression->get_result_id());
+            }
+
+            if (false)
+                ;
+            else if (op == "*")
+                operator_name = "mul";
+            else if (op == "/")
+                operator_name = "div";
+            else if (op == "%")
+                operator_name = "mod";
 
             assign_result_id();
             ret += fmt::format("%{} = {} {}, {}\n", get_result_id(),
@@ -522,30 +527,34 @@ namespace compiler::ast
         std::string to_koopa() const override
         {
             std::string ret;
-            ret += add_expression->to_koopa();
-            ret += multiply_expression->to_koopa();
 
             std::string operator_name;
             std::string operand[2];
-            {
-                if (false)
-                    ;
-                else if (op == "+")
-                    operator_name = "add";
-                else if (op == "-")
-                    operator_name = "sub";
 
-                if (int id = add_expression->get_result_id())
-                    operand[0] = fmt::format("%{}", id);
-                else
-                    operand[0] =
-                        fmt::format("{}", *add_expression->get_inline_number());
-                if (int id = multiply_expression->get_result_id())
-                    operand[1] = fmt::format("%{}", id);
-                else
-                    operand[1] = fmt::format(
-                        "{}", *multiply_expression->get_inline_number());
+            if (auto const_value = add_expression->get_inline_number())
+                operand[0] = std::to_string(*const_value);
+            else
+            {
+                ret += add_expression->to_koopa();
+                operand[0] =
+                    fmt::format("%{}", add_expression->get_result_id());
             }
+
+            if (auto const_value = multiply_expression->get_inline_number())
+                operand[1] = std::to_string(*const_value);
+            else
+            {
+                ret += multiply_expression->to_koopa();
+                operand[1] =
+                    fmt::format("%{}", multiply_expression->get_result_id());
+            }
+
+            if (false)
+                ;
+            else if (op == "+")
+                operator_name = "add";
+            else if (op == "-")
+                operator_name = "sub";
 
             assign_result_id();
             ret += fmt::format("%{} = {} {}, {}\n", get_result_id(),
@@ -615,34 +624,38 @@ namespace compiler::ast
         std::string to_koopa() const override
         {
             std::string ret;
-            ret += relation_expression->to_koopa();
-            ret += add_expression->to_koopa();
 
             std::string operator_name;
             std::string operand[2];
-            {
-                if (false)
-                    ;
-                else if (op == "<")
-                    operator_name = "lt";
-                else if (op == ">")
-                    operator_name = "gt";
-                else if (op == "<=")
-                    operator_name = "le";
-                else if (op == ">=")
-                    operator_name = "ge";
 
-                if (int id = relation_expression->get_result_id())
-                    operand[0] = fmt::format("%{}", id);
-                else
-                    operand[0] = fmt::format(
-                        "{}", *relation_expression->get_inline_number());
-                if (int id = add_expression->get_result_id())
-                    operand[1] = fmt::format("%{}", id);
-                else
-                    operand[1] =
-                        fmt::format("{}", *add_expression->get_inline_number());
+            if (auto const_value = relation_expression->get_inline_number())
+                operand[0] = std::to_string(*const_value);
+            else
+            {
+                ret += relation_expression->to_koopa();
+                operand[0] =
+                    fmt::format("%{}", relation_expression->get_result_id());
             }
+
+            if (auto const_value = add_expression->get_inline_number())
+                operand[1] = std::to_string(*const_value);
+            else
+            {
+                ret += add_expression->to_koopa();
+                operand[1] =
+                    fmt::format("%{}", add_expression->get_result_id());
+            }
+
+            if (false)
+                ;
+            else if (op == "<")
+                operator_name = "lt";
+            else if (op == ">")
+                operator_name = "gt";
+            else if (op == "<=")
+                operator_name = "le";
+            else if (op == ">=")
+                operator_name = "ge";
 
             assign_result_id();
             ret += fmt::format("%{} = {} {}, {}\n", get_result_id(),
@@ -708,30 +721,34 @@ namespace compiler::ast
         std::string to_koopa() const override
         {
             std::string ret;
-            ret += equation_expression->to_koopa();
-            ret += relation_expression->to_koopa();
 
             std::string operator_name;
             std::string operand[2];
-            {
-                if (false)
-                    ;
-                else if (op == "==")
-                    operator_name = "eq";
-                else if (op == "!=")
-                    operator_name = "ne";
 
-                if (int id = equation_expression->get_result_id())
-                    operand[0] = fmt::format("%{}", id);
-                else
-                    operand[0] = fmt::format(
-                        "{}", *equation_expression->get_inline_number());
-                if (int id = relation_expression->get_result_id())
-                    operand[1] = fmt::format("%{}", id);
-                else
-                    operand[1] = fmt::format(
-                        "{}", *relation_expression->get_inline_number());
+            if (auto const_value = equation_expression->get_inline_number())
+                operand[0] = std::to_string(*const_value);
+            else
+            {
+                ret += equation_expression->to_koopa();
+                operand[0] =
+                    fmt::format("%{}", equation_expression->get_result_id());
             }
+
+            if (auto const_value = relation_expression->get_inline_number())
+                operand[1] = std::to_string(*const_value);
+            else
+            {
+                ret += relation_expression->to_koopa();
+                operand[1] =
+                    fmt::format("%{}", relation_expression->get_result_id());
+            }
+
+            if (false)
+                ;
+            else if (op == "==")
+                operator_name = "eq";
+            else if (op == "!=")
+                operator_name = "ne";
 
             assign_result_id();
             ret += fmt::format("%{} = {} {}, {}\n", get_result_id(),
@@ -791,21 +808,25 @@ namespace compiler::ast
         std::string to_koopa() const override
         {
             std::string ret;
-            ret += land_expression->to_koopa();
-            ret += equation_expression->to_koopa();
 
             std::string operand[2];
+
+            if (auto const_value = land_expression->get_inline_number())
+                operand[0] = std::to_string(*const_value);
+            else
             {
-                if (int id = land_expression->get_result_id())
-                    operand[0] = fmt::format("%{}", id);
-                else
-                    operand[0] = fmt::format(
-                        "{}", *land_expression->get_inline_number());
-                if (int id = equation_expression->get_result_id())
-                    operand[1] = fmt::format("%{}", id);
-                else
-                    operand[1] = fmt::format(
-                        "{}", *equation_expression->get_inline_number());
+                ret += land_expression->to_koopa();
+                operand[0] =
+                    fmt::format("%{}", land_expression->get_result_id());
+            }
+
+            if (auto const_value = equation_expression->get_inline_number())
+                operand[1] = std::to_string(*const_value);
+            else
+            {
+                ret += equation_expression->to_koopa();
+                operand[1] =
+                    fmt::format("%{}", equation_expression->get_result_id());
             }
 
             int bool_value[2];
@@ -874,21 +895,25 @@ namespace compiler::ast
         std::string to_koopa() const override
         {
             std::string ret;
-            ret += lor_expression->to_koopa();
-            ret += land_expression->to_koopa();
 
             std::string operand[2];
+
+            if (auto const_value = lor_expression->get_inline_number())
+                operand[0] = std::to_string(*const_value);
+            else
             {
-                if (int id = lor_expression->get_result_id())
-                    operand[0] = fmt::format("%{}", id);
-                else
-                    operand[0] =
-                        fmt::format("{}", *lor_expression->get_inline_number());
-                if (int id = land_expression->get_result_id())
-                    operand[1] = fmt::format("%{}", id);
-                else
-                    operand[1] = fmt::format(
-                        "{}", *land_expression->get_inline_number());
+                ret += lor_expression->to_koopa();
+                operand[0] =
+                    fmt::format("%{}", lor_expression->get_result_id());
+            }
+
+            if (auto const_value = land_expression->get_inline_number())
+                operand[1] = std::to_string(*const_value);
+            else
+            {
+                ret += land_expression->to_koopa();
+                operand[1] =
+                    fmt::format("%{}", land_expression->get_result_id());
             }
 
             int bool_value[2];
