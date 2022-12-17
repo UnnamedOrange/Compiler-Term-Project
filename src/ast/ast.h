@@ -10,14 +10,19 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
+#include <vector>
 
 #include <fmt/core.h>
+
+#include <frontend/symbol_table.h>
 
 namespace compiler::ast
 {
     inline int global_result_id;
     inline int new_result_id() { return ++global_result_id; }
+    inline symbol_table_t st;
 
     class ast_base_t;
     /**
@@ -49,13 +54,16 @@ namespace compiler::ast
         int get_result_id() const { return result_id; }
 
         /**
-         * @brief `inline_number` 表示 Koopa 中的整数字面量。
-         * 如果一个表达式不应该对应整数字面量，则结果为 0。
+         * @brief `inline_number` 表示编译期可计算出的常量。
+         * 如果一个表达式可以在编译时计算出一个常量，则结果不是 std::nullopt;
          */
-        virtual int get_inline_number() const { return 0; }
+        virtual std::optional<int> get_inline_number() const
+        {
+            return std::nullopt;
+        }
 
     public:
-        virtual std::string to_koopa() const = 0;
+        virtual std::string to_koopa() const { return ""; }
     };
 
     /**
@@ -110,17 +118,53 @@ namespace compiler::ast
 
     /**
      * @brief AST of a block.
+     * Block ::= "{" {BlockItem} "}";
+     * Fixed:
+     * Block ::= "{" "}";
+     * Block ::= "{" BlockItemList "}";
      */
     class ast_block_t : public ast_base_t
     {
     public:
-        ast_t statement;
+        std::vector<ast_t> block_items;
 
     public:
         std::string to_koopa() const override
         {
-            return fmt::format("%entry:\n{}", statement->to_koopa());
+            st.push();
+            std::string ret = "%entry:\n";
+            for (const auto& item : block_items)
+                ret += item->to_koopa();
+            st.pop();
+            return ret;
         }
+    };
+
+    /**
+     * @brief AST of a block item list.
+     * BlockItemList ::= BlockItem;
+     * BlockItemList ::= BlockItem BlockItemList;
+     *
+     * @note This is a temporary type only used in syntax analysis.
+     */
+    class ast_block_item_list_t : public ast_base_t
+    {
+    public:
+        ast_t block_item;
+        std::shared_ptr<ast_block_item_list_t> block_item_list;
+    };
+
+    /**
+     * @brief AST of a block item;
+     * BlockItem ::= Decl | Stmt;
+     */
+    class ast_block_item_t : public ast_base_t
+    {
+    public:
+        ast_t item; // Declaration or statement.
+
+    public:
+        std::string to_koopa() const override { return item->to_koopa(); }
     };
 
     /**
@@ -139,8 +183,8 @@ namespace compiler::ast
             if (int id = expression->get_result_id())
                 return ret + fmt::format("ret %{}\n", id);
             else
-                return ret +
-                       fmt::format("ret {}\n", expression->get_inline_number());
+                return ret + fmt::format("ret {}\n",
+                                         *expression->get_inline_number());
         }
     };
 
@@ -154,7 +198,7 @@ namespace compiler::ast
         ast_t lor_expression;
 
     public:
-        int get_inline_number() const override
+        std::optional<int> get_inline_number() const override
         {
             return lor_expression->get_inline_number();
         }
@@ -178,7 +222,7 @@ namespace compiler::ast
         ast_t expression;
 
     public:
-        int get_inline_number() const override
+        std::optional<int> get_inline_number() const override
         {
             return expression->get_inline_number();
         }
@@ -202,10 +246,23 @@ namespace compiler::ast
         int number;
 
     public:
-        int get_inline_number() const override { return number; }
+        std::optional<int> get_inline_number() const override { return number; }
+    };
+
+    /**
+     * @brief AST of a primary_expression.
+     * PrimaryExp ::= LVal;
+     */
+    class ast_primary_expression_3_t : public ast_base_t
+    {
+    public:
+        ast_t lvalue;
 
     public:
-        std::string to_koopa() const override { return ""; }
+        std::optional<int> get_inline_number() const override
+        {
+            return lvalue->get_inline_number();
+        }
     };
 
     /**
@@ -218,7 +275,7 @@ namespace compiler::ast
         ast_t primary_expression;
 
     public:
-        int get_inline_number() const override
+        std::optional<int> get_inline_number() const override
         {
             return primary_expression->get_inline_number();
         }
@@ -243,120 +300,52 @@ namespace compiler::ast
         ast_t unary_expression;
 
     public:
-        int get_inline_number() const override
+        std::optional<int> get_inline_number() const override
         {
-            return unary_expression->get_inline_number();
+            auto rvalue = unary_expression->get_inline_number();
+            if (!rvalue)
+                return std::nullopt;
+
+            else if (op == "+")
+                return (*rvalue);
+            else if (op == "-")
+                return -(*rvalue);
+            else if (op == "!")
+                return !(*rvalue);
+
+            return std::nullopt;
         }
 
     public:
         std::string to_koopa() const override
         {
             auto ret = unary_expression->to_koopa();
-            if (false)
-                ;
-            else if (op == "+")
-            {
+            if (op == "+")
                 assign_result_id(unary_expression->get_result_id());
-            }
-            else if (op == "-")
+            else
             {
+                std::string operator_name;
+                std::string operand[2];
+                {
+                    if (false)
+                        ;
+                    else if (op == "-")
+                        operator_name = "sub";
+                    else if (op == "!")
+                        operator_name = "eq";
+
+                    operand[0] = "0";
+                    if (int id = unary_expression->get_result_id())
+                        operand[1] = fmt::format("%{}", id);
+                    else
+                        operand[1] = fmt::format(
+                            "{}", *unary_expression->get_inline_number());
+                }
+
                 assign_result_id();
-                if (int id = unary_expression->get_result_id())
-                {
-                    ret +=
-                        fmt::format("%{} = sub 0, %{}\n", get_result_id(), id);
-                }
-                else
-                {
-                    ret += fmt::format("%{} = sub 0, {}\n", get_result_id(),
-                                       unary_expression->get_inline_number());
-                }
+                ret += fmt::format("%{} = {} {}, {}\n", get_result_id(),
+                                   operator_name, operand[0], operand[1]);
             }
-            else if (op == "!")
-            {
-                assign_result_id();
-                if (int id = unary_expression->get_result_id())
-                {
-                    ret +=
-                        fmt::format("%{} = eq %{}, 0\n", get_result_id(), id);
-                }
-                else
-                {
-                    ret += fmt::format("%{} = eq {}, 0\n", get_result_id(),
-                                       unary_expression->get_inline_number());
-                }
-            }
-            return ret;
-        }
-    };
-
-    /**
-     * @brief AST of an add expression.
-     * AddExp ::= MulExp;
-     */
-    class ast_add_expression_1_t : public ast_base_t
-    {
-    public:
-        ast_t multiply_expression;
-
-    public:
-        int get_inline_number() const override
-        {
-            return multiply_expression->get_inline_number();
-        }
-
-    public:
-        std::string to_koopa() const override
-        {
-            auto ret = multiply_expression->to_koopa();
-            assign_result_id(multiply_expression->get_result_id());
-            return ret;
-        }
-    };
-
-    /**
-     * @brief AST of an add expression.
-     * AddExp ::= AddExp ("+" | "-") MulExp;
-     */
-    class ast_add_expression_2_t : public ast_base_t
-    {
-    public:
-        ast_t add_expression;
-        std::string op;
-        ast_t multiply_expression;
-
-    public:
-        std::string to_koopa() const override
-        {
-            std::string ret;
-            ret += add_expression->to_koopa();
-            ret += multiply_expression->to_koopa();
-
-            std::string operator_name;
-            std::string operand[2];
-            {
-                if (false)
-                    ;
-                else if (op == "+")
-                    operator_name = "add";
-                else if (op == "-")
-                    operator_name = "sub";
-
-                if (int id = add_expression->get_result_id())
-                    operand[0] = fmt::format("%{}", id);
-                else
-                    operand[0] =
-                        fmt::format("{}", add_expression->get_inline_number());
-                if (int id = multiply_expression->get_result_id())
-                    operand[1] = fmt::format("%{}", id);
-                else
-                    operand[1] = fmt::format(
-                        "{}", multiply_expression->get_inline_number());
-            }
-
-            assign_result_id();
-            ret += fmt::format("%{} = {} {}, {}\n", get_result_id(),
-                               operator_name, operand[0], operand[1]);
             return ret;
         }
     };
@@ -371,7 +360,7 @@ namespace compiler::ast
         ast_t unary_expression;
 
     public:
-        int get_inline_number() const override
+        std::optional<int> get_inline_number() const override
         {
             return unary_expression->get_inline_number();
         }
@@ -397,6 +386,26 @@ namespace compiler::ast
         ast_t unary_expression;
 
     public:
+        std::optional<int> get_inline_number() const override
+        {
+            auto rvalue_1 = multiply_expression->get_inline_number();
+            if (!rvalue_1)
+                return std::nullopt;
+            auto rvalue_2 = unary_expression->get_inline_number();
+            if (!rvalue_2)
+                return std::nullopt;
+
+            else if (op == "*")
+                return (*rvalue_1) * (*rvalue_2);
+            else if (op == "/")
+                return (*rvalue_1) / (*rvalue_2);
+            else if (op == "%")
+                return (*rvalue_1) % (*rvalue_2);
+
+            return std::nullopt;
+        }
+
+    public:
         std::string to_koopa() const override
         {
             std::string ret;
@@ -419,12 +428,101 @@ namespace compiler::ast
                     operand[0] = fmt::format("%{}", id);
                 else
                     operand[0] = fmt::format(
-                        "{}", multiply_expression->get_inline_number());
+                        "{}", *multiply_expression->get_inline_number());
                 if (int id = unary_expression->get_result_id())
                     operand[1] = fmt::format("%{}", id);
                 else
                     operand[1] = fmt::format(
-                        "{}", unary_expression->get_inline_number());
+                        "{}", *unary_expression->get_inline_number());
+            }
+
+            assign_result_id();
+            ret += fmt::format("%{} = {} {}, {}\n", get_result_id(),
+                               operator_name, operand[0], operand[1]);
+            return ret;
+        }
+    };
+
+    /**
+     * @brief AST of an add expression.
+     * AddExp ::= MulExp;
+     */
+    class ast_add_expression_1_t : public ast_base_t
+    {
+    public:
+        ast_t multiply_expression;
+
+    public:
+        std::optional<int> get_inline_number() const override
+        {
+            return multiply_expression->get_inline_number();
+        }
+
+    public:
+        std::string to_koopa() const override
+        {
+            auto ret = multiply_expression->to_koopa();
+            assign_result_id(multiply_expression->get_result_id());
+            return ret;
+        }
+    };
+
+    /**
+     * @brief AST of an add expression.
+     * AddExp ::= AddExp ("+" | "-") MulExp;
+     */
+    class ast_add_expression_2_t : public ast_base_t
+    {
+    public:
+        ast_t add_expression;
+        std::string op;
+        ast_t multiply_expression;
+
+    public:
+        std::optional<int> get_inline_number() const override
+        {
+            auto rvalue_1 = add_expression->get_inline_number();
+            if (!rvalue_1)
+                return std::nullopt;
+            auto rvalue_2 = multiply_expression->get_inline_number();
+            if (!rvalue_2)
+                return std::nullopt;
+
+            else if (op == "+")
+                return (*rvalue_1) + (*rvalue_2);
+            else if (op == "-")
+                return (*rvalue_1) - (*rvalue_2);
+
+            return std::nullopt;
+        }
+
+    public:
+        std::string to_koopa() const override
+        {
+            std::string ret;
+            ret += add_expression->to_koopa();
+            ret += multiply_expression->to_koopa();
+
+            std::string operator_name;
+            std::string operand[2];
+            {
+                if (false)
+                    ;
+                else if (op == "+")
+                    operator_name = "add";
+                else if (op == "-")
+                    operator_name = "sub";
+
+                if (int id = add_expression->get_result_id())
+                    operand[0] = fmt::format("%{}", id);
+                else
+                    operand[0] =
+                        fmt::format("{}", *add_expression->get_inline_number());
+                if (int id = multiply_expression->get_result_id())
+                    operand[1] = fmt::format("%{}", id);
+                else
+                    operand[1] = fmt::format(
+                        "{}", *multiply_expression->get_inline_number());
             }
 
             assign_result_id();
@@ -444,7 +542,7 @@ namespace compiler::ast
         ast_t add_expression;
 
     public:
-        int get_inline_number() const override
+        std::optional<int> get_inline_number() const override
         {
             return add_expression->get_inline_number();
         }
@@ -468,6 +566,28 @@ namespace compiler::ast
         ast_t relation_expression;
         std::string op;
         ast_t add_expression;
+
+    public:
+        std::optional<int> get_inline_number() const override
+        {
+            auto rvalue_1 = relation_expression->get_inline_number();
+            if (!rvalue_1)
+                return std::nullopt;
+            auto rvalue_2 = add_expression->get_inline_number();
+            if (!rvalue_2)
+                return std::nullopt;
+
+            else if (op == "<")
+                return (*rvalue_1) < (*rvalue_2);
+            else if (op == ">")
+                return (*rvalue_1) > (*rvalue_2);
+            else if (op == "<=")
+                return (*rvalue_1) <= (*rvalue_2);
+            else if (op == ">=")
+                return (*rvalue_1) >= (*rvalue_2);
+
+            return std::nullopt;
+        }
 
     public:
         std::string to_koopa() const override
@@ -494,12 +614,12 @@ namespace compiler::ast
                     operand[0] = fmt::format("%{}", id);
                 else
                     operand[0] = fmt::format(
-                        "{}", relation_expression->get_inline_number());
+                        "{}", *relation_expression->get_inline_number());
                 if (int id = add_expression->get_result_id())
                     operand[1] = fmt::format("%{}", id);
                 else
                     operand[1] =
-                        fmt::format("{}", add_expression->get_inline_number());
+                        fmt::format("{}", *add_expression->get_inline_number());
             }
 
             assign_result_id();
@@ -519,7 +639,7 @@ namespace compiler::ast
         ast_t relation_expression;
 
     public:
-        int get_inline_number() const override
+        std::optional<int> get_inline_number() const override
         {
             return relation_expression->get_inline_number();
         }
@@ -545,6 +665,24 @@ namespace compiler::ast
         ast_t relation_expression;
 
     public:
+        std::optional<int> get_inline_number() const override
+        {
+            auto rvalue_1 = equation_expression->get_inline_number();
+            if (!rvalue_1)
+                return std::nullopt;
+            auto rvalue_2 = relation_expression->get_inline_number();
+            if (!rvalue_2)
+                return std::nullopt;
+
+            else if (op == "==")
+                return (*rvalue_1) == (*rvalue_2);
+            else if (op == "!=")
+                return (*rvalue_1) != (*rvalue_2);
+
+            return std::nullopt;
+        }
+
+    public:
         std::string to_koopa() const override
         {
             std::string ret;
@@ -565,12 +703,12 @@ namespace compiler::ast
                     operand[0] = fmt::format("%{}", id);
                 else
                     operand[0] = fmt::format(
-                        "{}", equation_expression->get_inline_number());
+                        "{}", *equation_expression->get_inline_number());
                 if (int id = relation_expression->get_result_id())
                     operand[1] = fmt::format("%{}", id);
                 else
                     operand[1] = fmt::format(
-                        "{}", relation_expression->get_inline_number());
+                        "{}", *relation_expression->get_inline_number());
             }
 
             assign_result_id();
@@ -590,7 +728,7 @@ namespace compiler::ast
         ast_t equation_expression;
 
     public:
-        int get_inline_number() const override
+        std::optional<int> get_inline_number() const override
         {
             return equation_expression->get_inline_number();
         }
@@ -615,6 +753,19 @@ namespace compiler::ast
         ast_t equation_expression;
 
     public:
+        std::optional<int> get_inline_number() const override
+        {
+            auto rvalue_1 = land_expression->get_inline_number();
+            if (!rvalue_1)
+                return std::nullopt;
+            auto rvalue_2 = equation_expression->get_inline_number();
+            if (!rvalue_2)
+                return std::nullopt;
+
+            return (*rvalue_1) && (*rvalue_2);
+        }
+
+    public:
         std::string to_koopa() const override
         {
             std::string ret;
@@ -626,13 +777,13 @@ namespace compiler::ast
                 if (int id = land_expression->get_result_id())
                     operand[0] = fmt::format("%{}", id);
                 else
-                    operand[0] =
-                        fmt::format("{}", land_expression->get_inline_number());
+                    operand[0] = fmt::format(
+                        "{}", *land_expression->get_inline_number());
                 if (int id = equation_expression->get_result_id())
                     operand[1] = fmt::format("%{}", id);
                 else
                     operand[1] = fmt::format(
-                        "{}", equation_expression->get_inline_number());
+                        "{}", *equation_expression->get_inline_number());
             }
 
             int bool_value[2];
@@ -660,7 +811,7 @@ namespace compiler::ast
         ast_t land_expression;
 
     public:
-        int get_inline_number() const override
+        std::optional<int> get_inline_number() const override
         {
             return land_expression->get_inline_number();
         }
@@ -685,6 +836,19 @@ namespace compiler::ast
         ast_t land_expression;
 
     public:
+        std::optional<int> get_inline_number() const override
+        {
+            auto rvalue_1 = lor_expression->get_inline_number();
+            if (!rvalue_1)
+                return std::nullopt;
+            auto rvalue_2 = land_expression->get_inline_number();
+            if (!rvalue_2)
+                return std::nullopt;
+
+            return (*rvalue_1) || (*rvalue_2);
+        }
+
+    public:
         std::string to_koopa() const override
         {
             std::string ret;
@@ -697,12 +861,12 @@ namespace compiler::ast
                     operand[0] = fmt::format("%{}", id);
                 else
                     operand[0] =
-                        fmt::format("{}", lor_expression->get_inline_number());
+                        fmt::format("{}", *lor_expression->get_inline_number());
                 if (int id = land_expression->get_result_id())
                     operand[1] = fmt::format("%{}", id);
                 else
-                    operand[1] =
-                        fmt::format("{}", land_expression->get_inline_number());
+                    operand[1] = fmt::format(
+                        "{}", *land_expression->get_inline_number());
             }
 
             int bool_value[2];
@@ -717,6 +881,150 @@ namespace compiler::ast
             ret += fmt::format("%{} = or %{}, %{}\n", get_result_id(),
                                bool_value[0], bool_value[1]);
             return ret;
+        }
+    };
+
+    /**
+     * @brief AST of a declaration statement.
+     * Decl ::= ConstDecl;
+     */
+    class ast_declaration_t : public ast_base_t
+    {
+    public:
+        ast_t const_declaration;
+
+    public:
+        std::string to_koopa() const override
+        {
+            return const_declaration->to_koopa();
+        }
+    };
+
+    /**
+     * @brief AST of a const declaration statement.
+     * ConstDecl ::= "const" BType ConstDef {"," ConstDef} ";";
+     * Fixed:
+     * ConstDecl ::= "const" BType ConstDefList ";";
+     */
+    class ast_const_declaration_t : public ast_base_t
+    {
+    public:
+        ast_t base_type;
+        std::vector<ast_t> const_definitions;
+
+    public:
+        std::string to_koopa() const override
+        {
+            for (const auto& def : const_definitions)
+                def->to_koopa();
+            return "";
+        }
+    };
+
+    /**
+     * @brief AST of a base type.
+     * BType ::= "int";
+     */
+    class ast_base_type_t : public ast_base_t
+    {
+    public:
+        std::string type_name;
+    };
+
+    /**
+     * @brief AST of a const definition list.
+     * ConstDefList ::= ConstDef;
+     * ConstDefList ::= ConstDef "," ConstDefList;
+     *
+     * @note This is a temporary type only used in syntax analysis.
+     */
+    class ast_const_definition_list_t : public ast_base_t
+    {
+    public:
+        ast_t const_definition;
+        std::shared_ptr<ast_const_definition_list_t> const_definition_list;
+    };
+
+    /**
+     * @brief AST of a const definition.
+     * ConstDef ::= IDENT "=" ConstInitVal;
+     */
+    class ast_const_definition_t : public ast_base_t
+    {
+    public:
+        std::string raw_name;
+        int value;
+
+    public:
+        std::string to_koopa() const override
+        {
+            symbol_const_t symbol;
+            symbol.value = value;
+            st.insert(raw_name, std::move(symbol));
+            return "";
+        }
+    };
+
+    /**
+     * @brief AST of a const initial value.
+     * ConstInitVal ::= ConstExp;
+     */
+    class ast_const_initial_value_t : public ast_base_t
+    {
+    public:
+        ast_t const_expression;
+
+    public:
+        std::optional<int> get_inline_number() const override
+        {
+            return const_expression->get_inline_number();
+        }
+
+    public:
+        std::string to_koopa() const override
+        {
+            return const_expression->to_koopa();
+        }
+    };
+
+    /**
+     * @brief AST of a const expression.
+     * ConstExp ::= Exp;
+     */
+    class ast_const_expression_t : public ast_base_t
+    {
+    public:
+        ast_t expression;
+
+    public:
+        std::optional<int> get_inline_number() const override
+        {
+            return expression->get_inline_number();
+        }
+
+    public:
+        std::string to_koopa() const override { return expression->to_koopa(); }
+    };
+
+    /**
+     * @brief AST of an lvalue.
+     * LVal ::= IDENT;
+     */
+    class ast_lvalue_t : public ast_base_t
+    {
+    public:
+        std::string raw_name;
+
+    public:
+        std::optional<int> get_inline_number() const override
+        {
+            auto symbol = st.at(raw_name);
+            if (!symbol)
+                return std::nullopt;
+            if (!std::holds_alternative<symbol_const_t>(*symbol))
+                return std::nullopt;
+
+            return std::get<symbol_const_t>(*symbol).value;
         }
     };
 } // namespace compiler::ast
