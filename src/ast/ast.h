@@ -171,7 +171,7 @@ namespace compiler::ast
      * @brief AST of a statement.
      * Stmt ::= "return" Exp ";";
      */
-    class ast_statement_t : public ast_base_t
+    class ast_statement_1_t : public ast_base_t
     {
     public:
         ast_t expression;
@@ -185,6 +185,28 @@ namespace compiler::ast
             else
                 return ret + fmt::format("ret {}\n",
                                          *expression->get_inline_number());
+        }
+    };
+
+    /**
+     * @brief AST of a statement.
+     * Stmt ::= LVal "=" Exp ";";
+     */
+    class ast_statement_2_t : public ast_base_t
+    {
+    public:
+        ast_t lvalue;
+        ast_t expression;
+
+    public:
+        std::string to_koopa() const override
+        {
+            std::string ret;
+            ret += lvalue->to_koopa();
+            ret += expression->to_koopa();
+
+            // TODO: Implement.
+            return ret;
         }
     };
 
@@ -888,7 +910,7 @@ namespace compiler::ast
      * @brief AST of a declaration statement.
      * Decl ::= ConstDecl;
      */
-    class ast_declaration_t : public ast_base_t
+    class ast_declaration_1_t : public ast_base_t
     {
     public:
         ast_t const_declaration;
@@ -898,6 +920,32 @@ namespace compiler::ast
         {
             return const_declaration->to_koopa();
         }
+    };
+
+    /**
+     * @brief AST of a declaration statement.
+     * Decl ::= VarDecl;
+     */
+    class ast_declaration_2_t : public ast_base_t
+    {
+    public:
+        ast_t variable_declaration;
+
+    public:
+        std::string to_koopa() const override
+        {
+            return variable_declaration->to_koopa();
+        }
+    };
+
+    /**
+     * @brief AST of a base type.
+     * BType ::= "int";
+     */
+    class ast_base_type_t : public ast_base_t
+    {
+    public:
+        std::string type_name;
     };
 
     /**
@@ -919,16 +967,6 @@ namespace compiler::ast
                 def->to_koopa();
             return "";
         }
-    };
-
-    /**
-     * @brief AST of a base type.
-     * BType ::= "int";
-     */
-    class ast_base_type_t : public ast_base_t
-    {
-    public:
-        std::string type_name;
     };
 
     /**
@@ -1004,6 +1042,108 @@ namespace compiler::ast
 
     public:
         std::string to_koopa() const override { return expression->to_koopa(); }
+    };
+
+    /**
+     * @brief AST of a variable declaration statement.
+     * VarDecl ::= BType VarDef {"," VarDef} ";";
+     * Fixed:
+     * VarDecl ::= BType VarDefList ";";
+     */
+    class ast_variable_declaration_t : public ast_base_t
+    {
+    public:
+        ast_t base_type;
+        std::vector<ast_t> variable_definitions;
+
+    public:
+        std::string to_koopa() const override
+        {
+            std::string ret;
+            for (const auto& def : variable_definitions)
+                ret += def->to_koopa();
+            return ret;
+        }
+    };
+
+    /**
+     * @brief AST of a variable definition list.
+     * VarDefList ::= VarDef;
+     * VarDefList ::= VarDef "," VarDefList;
+     *
+     * @note This is a temporary type only used in syntax analysis.
+     */
+    class ast_variable_definition_list_t : public ast_base_t
+    {
+    public:
+        ast_t variable_definition;
+        std::shared_ptr<ast_variable_definition_list_t>
+            variable_definition_list;
+    };
+
+    /**
+     * @brief AST of a variable definition.
+     * VarDef ::= IDENT;
+     */
+    class ast_variable_definition_1_t : public ast_base_t
+    {
+    public:
+        std::string raw_name;
+
+    public:
+        std::string to_koopa() const override
+        {
+            symbol_variable_t symbol;
+            st.insert(raw_name, std::move(symbol));
+            return "";
+        }
+    };
+
+    /**
+     * @brief AST of a variable definition.
+     * VarDef ::= IDENT "=" InitVal;
+     */
+    class ast_variable_definition_2_t : public ast_base_t
+    {
+    public:
+        std::string raw_name;
+        ast_t initial_value;
+
+    public:
+        std::string to_koopa() const override
+        {
+            std::string ret;
+
+            symbol_variable_t symbol;
+            st.insert(raw_name, std::move(symbol));
+
+            ret += initial_value->to_koopa();
+            // TODO: Implement.
+            return ret;
+        }
+    };
+
+    /**
+     * @brief AST of an initial value.
+     * InitVal ::= Exp;
+     */
+    class ast_initial_value_t : public ast_base_t
+    {
+    public:
+        ast_t expression;
+
+    public:
+        std::optional<int> get_inline_number() const override
+        {
+            return expression->get_inline_number();
+        }
+
+    public:
+        std::string to_koopa() const override
+        {
+            // TODO: Implement.
+            return expression->to_koopa();
+        }
     };
 
     /**
