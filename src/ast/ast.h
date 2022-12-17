@@ -199,15 +199,7 @@ namespace compiler::ast
         ast_t expression;
 
     public:
-        std::string to_koopa() const override
-        {
-            std::string ret;
-            ret += lvalue->to_koopa();
-            ret += expression->to_koopa();
-
-            // TODO: Implement.
-            return ret;
-        }
+        std::string to_koopa() const override;
     };
 
     /**
@@ -284,6 +276,14 @@ namespace compiler::ast
         std::optional<int> get_inline_number() const override
         {
             return lvalue->get_inline_number();
+        }
+
+    public:
+        std::string to_koopa() const override
+        {
+            auto ret = lvalue->to_koopa();
+            assign_result_id(lvalue->get_result_id());
+            return ret;
         }
     };
 
@@ -946,6 +946,14 @@ namespace compiler::ast
     {
     public:
         std::string type_name;
+
+    public:
+        std::string to_koopa() const override
+        {
+            if (type_name == "int")
+                return "i32";
+            return type_name;
+        }
     };
 
     /**
@@ -1091,6 +1099,19 @@ namespace compiler::ast
     public:
         std::shared_ptr<ast_base_type_t> base_type;
         std::string raw_name;
+
+    public:
+        std::string to_koopa() const override
+        {
+            {
+                symbol_variable_t symbol;
+                st.insert(raw_name, std::move(symbol));
+            }
+
+            auto symbol = std::get<symbol_variable_t>(*st.at(raw_name));
+            auto type = base_type->to_koopa();
+            return fmt::format("@{} = alloc {}\n", symbol.internal_name, type);
+        }
     };
 
     /**
@@ -1099,13 +1120,6 @@ namespace compiler::ast
      */
     class ast_variable_definition_1_t : public ast_variable_definition_t
     {
-    public:
-        std::string to_koopa() const override
-        {
-            symbol_variable_t symbol;
-            st.insert(raw_name, std::move(symbol));
-            return "";
-        }
     };
 
     /**
@@ -1120,13 +1134,25 @@ namespace compiler::ast
     public:
         std::string to_koopa() const override
         {
-            std::string ret;
+            auto ret = ast_variable_definition_t::to_koopa();
 
-            symbol_variable_t symbol;
-            st.insert(raw_name, std::move(symbol));
+            std::string initial_value_holder;
+            {
+                auto const_initial_value = initial_value->get_inline_number();
+                if (const_initial_value)
+                    initial_value_holder = std::to_string(*const_initial_value);
+                else
+                {
+                    ret += initial_value->to_koopa();
+                    initial_value_holder =
+                        fmt::format("%{}", initial_value->get_result_id());
+                }
+            }
 
-            ret += initial_value->to_koopa();
-            // TODO: Implement.
+            auto symbol = std::get<symbol_variable_t>(*st.at(raw_name));
+            ret += fmt::format("store {}, @{}\n", initial_value_holder,
+                               symbol.internal_name);
+
             return ret;
         }
     };
@@ -1149,8 +1175,9 @@ namespace compiler::ast
     public:
         std::string to_koopa() const override
         {
-            // TODO: Implement.
-            return expression->to_koopa();
+            auto ret = expression->to_koopa();
+            assign_result_id(expression->get_result_id());
+            return ret;
         }
     };
 
@@ -1174,5 +1201,42 @@ namespace compiler::ast
 
             return std::get<symbol_const_t>(*symbol).value;
         }
+
+    public:
+        std::string to_koopa() const override
+        {
+            assign_result_id(); // Always assign a new id to load.
+            auto symbol = std::get<symbol_variable_t>(*st.at(raw_name));
+            return fmt::format("%{} = load @{}\n", get_result_id(),
+                               symbol.internal_name);
+        }
     };
+
+    inline std::string ast_statement_2_t::to_koopa() const
+    {
+        std::string ret;
+
+        std::string expression_holder;
+        if (auto const_value = expression->get_inline_number())
+        {
+            expression_holder = std::to_string(*const_value);
+        }
+        else
+        {
+            ret += expression->to_koopa();
+            expression_holder = fmt::format("%{}", expression->get_result_id());
+        }
+
+        // Always regrad lvalue as a name.
+        // ret += lvalue->to_koopa();
+        {
+            auto ast_lvalue = std::dynamic_pointer_cast<ast_lvalue_t>(lvalue);
+            auto symbol =
+                std::get<symbol_variable_t>(*st.at(ast_lvalue->raw_name));
+
+            ret += fmt::format("store {}, @{}\n", expression_holder,
+                               symbol.internal_name);
+        }
+        return ret;
+    }
 } // namespace compiler::ast
