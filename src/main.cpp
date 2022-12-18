@@ -104,13 +104,15 @@ int main(int argn, char** argv)
     }
 
     // Get mode from the arguments.
-    if constexpr (DEBUG_USE_COMPILER_MODE == compiler_mode_t::unknown)
     {
         int mode_count = 0;
         mode_count += program.get<bool>("-koopa");
         mode_count += program.get<bool>("-riscv");
         mode_count += program.get<bool>("-perf");
-        if (mode_count != 1)
+        if ((DEBUG_USE_COMPILER_MODE != compiler_mode_t::unknown &&
+             mode_count > 1) ||
+            (DEBUG_USE_COMPILER_MODE == compiler_mode_t::unknown &&
+             mode_count != 1))
         {
             std::cerr << "Please specify exactly one mode." << std::endl;
             std::cerr << program;

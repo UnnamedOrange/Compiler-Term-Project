@@ -19,7 +19,7 @@
 // https://www.gnu.org/software/bison/manual/html_node/_0025code-Summary.html
 %code requires {
 // 定义类型。
-#include <ast/ast.h>
+#include <frontend/ast.h>
 using namespace compiler::ast;
 
 #include <variant>
@@ -71,7 +71,7 @@ void yyerror(ast_t& ast, const char* s);
  * %token <<<类型>>> { <终结符枚举名> ... } // 类型在 union 中定义。
  */
 
-%token INT RETURN
+%token INT RETURN CONST
 %token IDENTIFIER
 %token INT_LITERAL
 %token LT GT LE GE EQ NE
@@ -86,7 +86,18 @@ void yyerror(ast_t& ast, const char* s);
  * 如果使用默认类型，则可省略。
  */
 
-%type nt_program nt_function nt_function_type nt_block nt_statement nt_number
+%type nt_program nt_function nt_function_type
+%type nt_number
+%type nt_block
+%type nt_block_item nt_block_item_list
+%type nt_statement
+%type nt_declaration nt_const_declaration nt_variable_declaration
+%type nt_base_type
+%type nt_lvalue
+%type nt_const_definition nt_const_definition_list
+%type nt_const_initial_value nt_const_expression
+%type nt_variable_definition nt_variable_definition_list
+%type nt_initial_value
 %type nt_expression nt_primary_expression
 %type nt_unary_expression nt_unary_operator
 %type nt_multiply_expression nt_multiply_operator
@@ -113,32 +124,62 @@ nt_program : nt_function {
     auto ast_temp = std::make_shared<ast_program_t>();
     ast_temp->function = std::get<ast_t>($1);
     ast = std::move(ast_temp); // See parse-param.
-};
+}
 nt_function : nt_function_type IDENTIFIER '(' ')' nt_block {
     auto ast_function = std::make_shared<ast_function_t>();
     ast_function->function_type = std::get<ast_t>($1);
     ast_function->function_name = std::get<string>($2);
     ast_function->block = std::get<ast_t>($5);
     $$ = ast_function;
-};
+}
 nt_function_type : INT {
     auto ast_function_type = std::make_shared<ast_function_type_t>();
     ast_function_type->type_name = "int";
     $$ = ast_function_type;
-};
-nt_block : '{' nt_statement '}' {
+}
+nt_block : '{' '}' {
+    $$ = std::make_shared<ast_block_t>();
+}
+| '{' nt_block_item_list '}' {
     auto ast_block = std::make_shared<ast_block_t>();
-    ast_block->statement = std::get<ast_t>($2);
+    auto current_list = std::dynamic_pointer_cast<ast_block_item_list_t>(std::get<ast_t>($2));
+    while (current_list)
+    {
+        ast_block->block_items.push_back(std::move(current_list->block_item));
+        current_list = current_list->block_item_list;
+    }
     $$ = ast_block;
-};
+}
+nt_block_item_list : nt_block_item {
+    auto ast_block_item_list = std::make_shared<ast_block_item_list_t>();
+    ast_block_item_list->block_item = std::get<ast_t>($1);
+    $$ = ast_block_item_list;
+}
+| nt_block_item nt_block_item_list {
+    auto ast_block_item_list = std::make_shared<ast_block_item_list_t>();
+    ast_block_item_list->block_item = std::get<ast_t>($1);
+    ast_block_item_list->block_item_list = std::dynamic_pointer_cast<ast_block_item_list_t>(std::get<ast_t>($2));
+    $$ = ast_block_item_list;
+}
+nt_block_item : nt_declaration | nt_statement {
+    auto ast_block_item = std::make_shared<ast_block_item_t>();
+    ast_block_item->item = std::get<ast_t>($1);
+    $$ = ast_block_item;
+}
 nt_statement : RETURN nt_expression ';' {
-    auto ast_statement = std::make_shared<ast_statement_t>();
+    auto ast_statement = std::make_shared<ast_statement_1_t>();
     ast_statement->expression = std::get<ast_t>($2);
     $$ = ast_statement;
-};
+}
+| nt_lvalue '=' nt_expression ';' {
+    auto ast_statement = std::make_shared<ast_statement_2_t>();
+    ast_statement->lvalue = std::get<ast_t>($1);
+    ast_statement->expression = std::get<ast_t>($3);
+    $$ = ast_statement;
+}
 nt_number : INT_LITERAL {
     $$ = $1;
-};
+}
 nt_expression : nt_lor_expression {
     auto ast_expression = std::make_shared<ast_expression_t>();
     ast_expression->lor_expression = std::get<ast_t>($1);
@@ -152,6 +193,11 @@ nt_primary_expression : '(' nt_expression ')' {
 | nt_number {
     auto ast_primary_expression = std::make_shared<ast_primary_expression_2_t>();
     ast_primary_expression->number = std::get<int>($1);
+    $$ = ast_primary_expression;
+}
+| nt_lvalue {
+    auto ast_primary_expression = std::make_shared<ast_primary_expression_3_t>();
+    ast_primary_expression->lvalue = std::get<ast_t>($1);
     $$ = ast_primary_expression;
 }
 nt_unary_expression : nt_primary_expression {
@@ -249,6 +295,106 @@ nt_lor_expression : nt_land_expression {
     ast_lor_expression->lor_expression = std::get<ast_t>($1);
     ast_lor_expression->land_expression = std::get<ast_t>($3);
     $$ = ast_lor_expression;
+}
+nt_declaration : nt_const_declaration {
+    auto ast_declaration = std::make_shared<ast_declaration_1_t>();
+    ast_declaration->const_declaration = std::get<ast_t>($1);
+    $$ = ast_declaration;
+}
+| nt_variable_declaration {
+    auto ast_declaration = std::make_shared<ast_declaration_2_t>();
+    ast_declaration->variable_declaration = std::get<ast_t>($1);
+    $$ = ast_declaration;
+}
+nt_base_type : INT {
+    auto ast_base_type = std::make_shared<ast_base_type_t>();
+    ast_base_type->type_name = "int";
+    $$ = ast_base_type;
+}
+nt_const_declaration : CONST nt_base_type nt_const_definition_list ';' {
+    auto ast_const_definition = std::make_shared<ast_const_declaration_t>();
+    ast_const_definition->base_type = std::get<ast_t>($2);
+    auto current_list = std::dynamic_pointer_cast<ast_const_definition_list_t>(std::get<ast_t>($3));
+    while (current_list)
+    {
+        auto def = std::dynamic_pointer_cast<ast_const_definition_t>(std::move(current_list->const_definition));
+        def->base_type = std::dynamic_pointer_cast<ast_base_type_t>(ast_const_definition->base_type);
+        ast_const_definition->const_definitions.push_back(std::move(def));
+        current_list = current_list->const_definition_list;
+    }
+    $$ = ast_const_definition;
+}
+nt_const_definition_list : nt_const_definition {
+    auto ast_const_definition_list = std::make_shared<ast_const_definition_list_t>();
+    ast_const_definition_list->const_definition = std::get<ast_t>($1);
+    $$ = ast_const_definition_list;
+}
+| nt_const_definition ',' nt_const_definition_list {
+    auto ast_const_definition_list = std::make_shared<ast_const_definition_list_t>();
+    ast_const_definition_list->const_definition = std::get<ast_t>($1);
+    ast_const_definition_list->const_definition_list = std::dynamic_pointer_cast<ast_const_definition_list_t>(std::get<ast_t>($3));
+    $$ = ast_const_definition_list;
+}
+nt_const_definition : IDENTIFIER '=' nt_const_initial_value {
+    auto ast_const_definition = std::make_shared<ast_const_definition_t>();
+    ast_const_definition->raw_name = std::get<string>($1);
+    ast_const_definition->const_initial_value = std::get<ast_t>($3);
+    $$ = ast_const_definition;
+}
+nt_const_initial_value : nt_const_expression {
+    auto ast_const_initial_value = std::make_shared<ast_const_initial_value_t>();
+    ast_const_initial_value->const_expression = std::get<ast_t>($1);
+    $$ = ast_const_initial_value;
+}
+nt_const_expression : nt_expression {
+    auto ast_const_expression = std::make_shared<ast_const_expression_t>();
+    ast_const_expression->expression = std::get<ast_t>($1);
+    $$ = ast_const_expression;
+}
+nt_variable_declaration : nt_base_type nt_variable_definition_list ';' {
+    auto ast_variable_definition = std::make_shared<ast_variable_declaration_t>();
+    ast_variable_definition->base_type = std::get<ast_t>($1);
+    auto current_list = std::dynamic_pointer_cast<ast_variable_definition_list_t>(std::get<ast_t>($2));
+    while (current_list)
+    {
+        auto def = std::dynamic_pointer_cast<ast_variable_definition_t>(std::move(current_list->variable_definition));
+        def->base_type = std::dynamic_pointer_cast<ast_base_type_t>(ast_variable_definition->base_type);
+        ast_variable_definition->variable_definitions.push_back(std::move(def));
+        current_list = current_list->variable_definition_list;
+    }
+    $$ = ast_variable_definition;
+}
+nt_variable_definition_list : nt_variable_definition {
+    auto ast_variable_definition_list = std::make_shared<ast_variable_definition_list_t>();
+    ast_variable_definition_list->variable_definition = std::get<ast_t>($1);
+    $$ = ast_variable_definition_list;
+}
+| nt_variable_definition ',' nt_variable_definition_list {
+    auto ast_variable_definition_list = std::make_shared<ast_variable_definition_list_t>();
+    ast_variable_definition_list->variable_definition = std::get<ast_t>($1);
+    ast_variable_definition_list->variable_definition_list = std::dynamic_pointer_cast<ast_variable_definition_list_t>(std::get<ast_t>($3));
+    $$ = ast_variable_definition_list;
+}
+nt_variable_definition : IDENTIFIER {
+    auto ast_variable_definition = std::make_shared<ast_variable_definition_1_t>();
+    ast_variable_definition->raw_name = std::get<string>($1);
+    $$ = ast_variable_definition;
+}
+| IDENTIFIER '=' nt_initial_value {
+    auto ast_variable_definition = std::make_shared<ast_variable_definition_2_t>();
+    ast_variable_definition->raw_name = std::get<string>($1);
+    ast_variable_definition->initial_value = std::get<ast_t>($3);
+    $$ = ast_variable_definition;
+}
+nt_initial_value : nt_expression {
+    auto ast_initial_value = std::make_shared<ast_initial_value_t>();
+    ast_initial_value->expression = std::get<ast_t>($1);
+    $$ = ast_initial_value;
+}
+nt_lvalue : IDENTIFIER {
+    auto ast_lvalue = std::make_shared<ast_lvalue_t>();
+    ast_lvalue->raw_name = std::get<string>($1);
+    $$ = ast_lvalue;
 }
 %%
 
