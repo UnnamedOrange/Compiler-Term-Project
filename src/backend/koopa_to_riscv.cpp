@@ -19,51 +19,13 @@
 #include <fmt/core.h>
 
 #if defined(COMPILER_LINK_KOOPA)
+
 #include <koopa.h>
-#endif
+
+#include "register_manager.h"
 
 using namespace compiler;
 
-#if defined(COMPILER_LINK_KOOPA)
-
-class register_manager
-{
-private:
-    inline static constexpr std::array reg_names = {
-        "t0", "t1", "t2", "t3", "t4", "t5", "t6",
-        // "a0", // 用于返回值。
-        "a1", "a2", "a3", "a4", "a5",
-        // "a6", "a7", // 用于立即数。
-    };
-    std::array<std::vector<koopa_raw_value_t>, reg_names.size()> var_by_reg;
-    std::map<koopa_raw_value_t, size_t> reg_by_var;
-
-private:
-    size_t random_vacant_reg() const
-    {
-        for (size_t i = 0; i < reg_names.size(); i++)
-            if (var_by_reg[i].empty())
-                return i;
-        throw std::runtime_error("[Error] No vacant register.");
-    }
-
-public:
-    std::string get_reg(koopa_raw_value_t x1)
-    {
-        // 暂时直接分配寄存器，不考虑寄存器不够的情况。
-        if (!reg_by_var.count(x1))
-        {
-            int reg = random_vacant_reg();
-            var_by_reg[reg].push_back(x1);
-            reg_by_var[x1] = reg;
-        }
-        return operator[](x1);
-    }
-    std::string operator[](koopa_raw_value_t var_name) const
-    {
-        return reg_names[reg_by_var.at(var_name)];
-    }
-};
 register_manager rm;
 
 std::string to_riscv(const std::string&);
