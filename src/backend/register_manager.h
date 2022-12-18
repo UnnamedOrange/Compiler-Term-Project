@@ -14,6 +14,10 @@
 #include <string>
 #include <vector>
 
+#if defined(COMPILER_LINK_KOOPA)
+#include <koopa.h>
+#endif
+
 namespace compiler
 {
     /**
@@ -22,7 +26,11 @@ namespace compiler
     class register_manager
     {
     public:
+#if defined(COMPILER_LINK_KOOPA)
+        using variable_t = koopa_raw_value_t;
+#else
         using variable_t = const void*; // Should be koopa_raw_value_t.
+#endif
 
     private:
         inline static constexpr std::array reg_names = {
