@@ -97,10 +97,49 @@ std::string visit(const koopa_raw_slice_t& slice)
 }
 std::string visit(const koopa_raw_function_t& func)
 {
-    // 执行一些其他的必要操作。
-    // ...
+    auto ret = fmt::format("{}:\n", func->name + 1);
+
+    // 重置栈帧。
+    sfm.clear();
+    // 扫描函数中的所有指令, 算出需要分配的栈空间总量。
+    {
+        auto basic_blocks = func->bbs;
+        for (size_t i = 0; i < basic_blocks.len; i++)
+        {
+            auto basic_block_ptr = reinterpret_cast<koopa_raw_basic_block_t>(
+                basic_blocks.buffer[i]);
+            auto basic_block = basic_block_ptr->insts;
+            for (size_t j = 0; j < basic_block.len; j++)
+            {
+                auto instruction =
+                    reinterpret_cast<koopa_raw_value_t>(basic_block.buffer[j]);
+                // 为涉及的变量分配栈空间。
+                {
+                    if (instruction->ty->tag == KOOPA_RTT_UNIT)
+                        continue; // 没有返回值，跳过。
+                    // 暂时认为都是 int32_t。
+                    sfm.alloc(instruction, 4);
+                    // 不用单独考虑操作数，因为操作数一定是算出来的。
+                }
+            }
+        }
+    }
+    // 计算实际的栈帧大小，并生成导言。
+    size_t stack_frame_size =
+        (sfm.size() + 15) / 16 * 16; // 向上取整到 16 的倍数。
+    if (stack_frame_size <= 2048)    // [-2048, 2047]
+        ret += fmt::format("    addi sp, sp, -{}\n", stack_frame_size);
+    else // 太大，使用 li 指令代替立即数。
+    {
+        ret += fmt::format("    li a6, -{}\n", stack_frame_size);
+        ret += fmt::format("    add sp, sp, a6\n");
+    }
+
     // 访问所有基本块。
-    return fmt::format("{}:\n{}", func->name + 1, visit(func->bbs));
+    ret += visit(func->bbs);
+    // 后记在 return 指令处生成。
+
+    return ret;
 }
 std::string visit(const koopa_raw_basic_block_t& bb)
 {
@@ -137,14 +176,38 @@ std::string visit(const koopa_raw_value_t& value)
 std::string visit(const koopa_raw_return_t& return_inst)
 {
     std::string ret;
+
+    // 生成保存返回值的指令。
     if (return_inst.value->kind.tag == KOOPA_RVT_INTEGER)
-        ret += fmt::format("    li a0, {}\n    ret\n",
+        ret += fmt::format("    li a0, {}\n",
                            return_inst.value->kind.data.integer.value);
     else
     {
-        std::string reg_y = rm.get_reg(return_inst.value);
-        ret += fmt::format("    mv a0, {}\n    ret\n", reg_y);
+        std::string reg_ret = rm.reg_ret;
+        // 将变量加载到寄存器。
+        size_t offset = sfm.offset(return_inst.value);
+        if (offset < 2048)
+            ret += fmt::format("    lw {}, {}(sp)\n", reg_ret, offset);
+        else // 太大，使用 li 指令代替立即数。
+        {
+            ret += fmt::format("    li {}, {}\n", reg_ret, offset);
+            ret += fmt::format("    lw {}, {}(sp)\n", reg_ret, reg_ret);
+        }
     }
+
+    // 计算实际的栈帧大小，并生成后记。
+    size_t stack_frame_size =
+        (sfm.size() + 15) / 16 * 16; // 向上取整到 16 的倍数。
+    if (stack_frame_size < 2048)     // [-2048, 2047]
+        ret += fmt::format("    addi sp, sp, {}\n", stack_frame_size);
+    else // 太大，使用 li 指令代替立即数。
+    {
+        ret += fmt::format("    li {}, {}\n", rm.reg_y, stack_frame_size);
+        ret += fmt::format("    add sp, sp, {}\n", rm.reg_y);
+    }
+
+    // 生成 ret 指令。
+    ret += fmt::format("    ret\n");
     return ret;
 }
 std::string visit(const koopa_raw_binary_t& binary_inst,
