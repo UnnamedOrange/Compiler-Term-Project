@@ -15,7 +15,7 @@
 
 #include <fmt/core.h>
 
-#include <ast/ast.h>
+#include "ast.h"
 #include <parser/yy_interface.h>
 #include <utility.hpp>
 

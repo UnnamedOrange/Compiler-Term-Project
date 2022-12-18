@@ -16,7 +16,7 @@
 
 #include <fmt/core.h>
 
-#include <frontend/symbol_table.h>
+#include "symbol_table.h"
 
 namespace compiler::ast
 {

@@ -19,7 +19,7 @@
 // https://www.gnu.org/software/bison/manual/html_node/_0025code-Summary.html
 %code requires {
 // 定义类型。
-#include <ast/ast.h>
+#include <frontend/ast.h>
 using namespace compiler::ast;
 
 #include <variant>
