@@ -177,6 +177,20 @@ nt_statement : RETURN nt_expression ';' {
     ast_statement->expression = std::get<ast_t>($3);
     $$ = ast_statement;
 }
+| nt_expression ';' {
+    auto ast_statement = std::make_shared<ast_statement_3_t>();
+    ast_statement->expression = std::get<ast_t>($1);
+    $$ = ast_statement;
+}
+| ';' {
+    auto ast_statement = std::make_shared<ast_statement_3_t>();
+    $$ = ast_statement;
+}
+| nt_block {
+    auto ast_statement = std::make_shared<ast_statement_4_t>();
+    ast_statement->block = std::get<ast_t>($1);
+    $$ = ast_statement;
+}
 nt_number : INT_LITERAL {
     $$ = $1;
 }

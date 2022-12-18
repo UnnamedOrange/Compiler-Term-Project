@@ -91,11 +91,13 @@ namespace compiler::ast
     public:
         std::string to_koopa() const override
         {
-            return fmt::format(R"(fun @{}(): {} {{
-{}}}
-)",
-                               function_name, function_type->to_koopa(),
-                               block->to_koopa());
+            std::string ret;
+            ret += fmt::format("fun @{}() : {} {{\n", function_name,
+                               function_type->to_koopa());
+            ret += "%entry:\n";
+            ret += block->to_koopa();
+            ret += "}\n";
+            return ret;
         }
     };
 
@@ -131,8 +133,8 @@ namespace compiler::ast
     public:
         std::string to_koopa() const override
         {
+            std::string ret;
             st.push();
-            std::string ret = "%entry:\n";
             for (const auto& item : block_items)
                 ret += item->to_koopa();
             st.pop();
@@ -203,6 +205,37 @@ namespace compiler::ast
 
     public:
         std::string to_koopa() const override;
+    };
+
+    /**
+     * @brief AST of a statement.
+     * Stmt ::= [Exp] ";";
+     */
+    class ast_statement_3_t : public ast_base_t
+    {
+    public:
+        ast_t expression;
+
+    public:
+        std::string to_koopa() const override
+        {
+            if (expression)
+                return expression->to_koopa();
+            return "";
+        }
+    };
+
+    /**
+     * @brief AST of a statement.
+     * Stmt ::= Block;
+     */
+    class ast_statement_4_t : public ast_base_t
+    {
+    public:
+        ast_t block;
+
+    public:
+        std::string to_koopa() const override { return block->to_koopa(); }
     };
 
     /**
