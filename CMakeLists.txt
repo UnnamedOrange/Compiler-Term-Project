@@ -76,7 +76,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}"
 target_link_directories(${PROJECT_NAME} PRIVATE "${LIB_DIR}")
 
 # Add sources.
-file(GLOB_RECURSE C_CXX_SOURCES "src/*.c" "src/*.cpp" "src/*.h" "src/*.hpp")
+file(GLOB_RECURSE C_CXX_SOURCES CONFIGURE_DEPENDS "src/*.c" "src/*.cpp" "src/*.h" "src/*.hpp")
 target_sources(${PROJECT_NAME} PRIVATE "${C_CXX_SOURCES}")
 target_sources(${PROJECT_NAME} PRIVATE "${FLEX_Lexer_OUTPUTS}")
 target_sources(${PROJECT_NAME} PRIVATE "${BISON_Parser_OUTPUT_SOURCE}")
