@@ -23,7 +23,7 @@ void stack_frame_manager::alloc(variable_t variable_id, size_t size)
 {
     if (variable_to_index.count(variable_id))
         return; // 不要重复分配。
-    variable_to_index[variable_id] = offsets.size();
+    variable_to_index[variable_id] = offsets.size() - 1;
     offsets.push_back(offsets.back() + size);
 }
 int stack_frame_manager::offset(variable_t variable_id) const
