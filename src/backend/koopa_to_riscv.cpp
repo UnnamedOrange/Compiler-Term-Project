@@ -23,10 +23,12 @@
 #include <koopa.h>
 
 #include "register_manager.h"
+#include "stack_frame_manager.h"
 
 using namespace compiler;
 
 register_manager rm;
+stack_frame_manager sfm;
 
 std::string to_riscv(const std::string&);
 std::string visit(const koopa_raw_program_t&);
