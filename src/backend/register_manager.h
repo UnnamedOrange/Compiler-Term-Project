@@ -12,6 +12,7 @@
 #include <array>
 #include <map>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #if defined(COMPILER_LINK_KOOPA)
@@ -32,12 +33,25 @@ namespace compiler
         using variable_t = const void*; // Should be koopa_raw_value_t.
 #endif
 
-    private:
+    public:
+        inline static constexpr auto reg_ret = "a0";
+        inline static constexpr auto reg_x = "t1";
+        inline static constexpr auto reg_y = "t2";
+        inline static constexpr auto reg_z = "t3";
         inline static constexpr std::array reg_names = {
-            "t0", "t1", "t2", "t3", "t4", "t5", "t6",
+            "t0",
+            // "t1", "t2", "t3", // 用于运算结果和操作数。
+            "t4",
+            "t5",
+            "t6",
             // "a0", // 用于返回值。
-            "a1", "a2", "a3", "a4", "a5",
-            // "a6", "a7", // 用于立即数。
+            "a1",
+            "a2",
+            "a3",
+            "a4",
+            "a5",
+            "a6",
+            "a7",
         };
         std::array<std::vector<variable_t>, reg_names.size()> var_by_reg;
         std::map<variable_t, size_t> reg_by_var;
