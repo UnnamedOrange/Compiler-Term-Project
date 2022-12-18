@@ -31,3 +31,4 @@ int stack_frame_manager::offset(variable_t variable_id) const
     size_t index = variable_to_index.at(variable_id);
     return offsets[index];
 }
+size_t stack_frame_manager::size() const { return offsets.back(); }

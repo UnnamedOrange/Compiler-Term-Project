@@ -47,5 +47,9 @@ namespace compiler
          * @brief Get the offset of a variable.
          */
         int offset(variable_t variable_id) const;
+        /**
+         * @brief Get size of the current stack frame.
+         */
+        size_t size() const;
     };
 } // namespace compiler
