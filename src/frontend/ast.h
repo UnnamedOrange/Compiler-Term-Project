@@ -22,6 +22,20 @@ namespace compiler::ast
 {
     inline int global_result_id;
     inline int new_result_id() { return ++global_result_id; }
+    inline int global_sequential_id;
+    inline std::string new_sequential_id()
+    {
+        return fmt::format("seq_{}", ++global_sequential_id);
+    }
+    inline int global_if_id;
+    inline std::string new_if_id()
+    {
+        return fmt::format("if_{}", ++global_if_id);
+    }
+    inline std::string get_else_id()
+    {
+        return fmt::format("else_{}", global_if_id);
+    }
     inline symbol_table_t st;
 
     class ast_base_t;
@@ -94,8 +108,9 @@ namespace compiler::ast
             std::string ret;
             ret += fmt::format("fun @{}() : {} {{\n", function_name,
                                function_type->to_koopa());
-            ret += "%entry:\n";
+            ret += fmt::format("%{}_entry:\n", function_name);
             ret += block->to_koopa();
+            ret += "ret 0\n";
             ret += "}\n";
             return ret;
         }
@@ -189,6 +204,7 @@ namespace compiler::ast
                 ret += expression->to_koopa();
                 ret += fmt::format("ret %{}\n", expression->get_result_id());
             }
+            ret += fmt::format("%{}:\n", new_sequential_id());
             return ret;
         }
     };
@@ -255,7 +271,34 @@ namespace compiler::ast
         std::string to_koopa() const override
         {
             std::string ret;
-            // TODO: Implement.
+
+            std::string if_id = new_if_id();
+            std::string else_id = get_else_id();
+            std::string next = new_sequential_id();
+
+            std::string condition_result;
+            if (auto const_value = condition_expression->get_inline_number())
+            {
+                condition_result = std::to_string(*const_value);
+            }
+            else
+            {
+                ret += condition_expression->to_koopa();
+                condition_result =
+                    fmt::format("%{}", condition_expression->get_result_id());
+            }
+            ret += fmt::format("br {}, %{}, %{}\n", condition_result, if_id,
+                               else_branch ? else_id : next);
+            ret += fmt::format("%{}:\n", if_id);
+            ret += if_branch->to_koopa();
+            ret += fmt::format("jump %{}\n", next);
+            if (else_branch)
+            {
+                ret += fmt::format("%{}:\n", else_id);
+                ret += else_branch->to_koopa();
+                ret += fmt::format("jump %{}\n", next);
+            }
+            ret += fmt::format("%{}:\n", next);
             return ret;
         }
     };

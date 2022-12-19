@@ -44,6 +44,7 @@ namespace compiler
 
     private:
         std::vector<table_t> table_stack;
+        std::unordered_map<std::string, size_t> use_count;
 
     public:
         symbol_table_t();
