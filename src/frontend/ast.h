@@ -128,7 +128,7 @@ namespace compiler::ast
                                function_type->to_koopa());
             ret += fmt::format("%{}_entry:\n", function_name);
             ret += block->to_koopa();
-            ret += "ret 0\n";
+            ret += "    ret 0\n";
             ret += "}\n";
             return ret;
         }
@@ -216,11 +216,12 @@ namespace compiler::ast
         {
             std::string ret;
             if (auto const_value = expression->get_inline_number())
-                ret += fmt::format("ret {}\n", *const_value);
+                ret += fmt::format("    ret {}\n", *const_value);
             else
             {
                 ret += expression->to_koopa();
-                ret += fmt::format("ret %{}\n", expression->get_result_id());
+                ret +=
+                    fmt::format("    ret %{}\n", expression->get_result_id());
             }
             ret += fmt::format("%{}:\n", new_sequential_id());
             return ret;
@@ -305,16 +306,16 @@ namespace compiler::ast
                 condition_result =
                     fmt::format("%{}", condition_expression->get_result_id());
             }
-            ret += fmt::format("br {}, %{}, %{}\n", condition_result, if_id,
+            ret += fmt::format("    br {}, %{}, %{}\n", condition_result, if_id,
                                else_branch ? else_id : next);
             ret += fmt::format("%{}:\n", if_id);
             ret += if_branch->to_koopa();
-            ret += fmt::format("jump %{}\n", next);
+            ret += fmt::format("    jump %{}\n", next);
             if (else_branch)
             {
                 ret += fmt::format("%{}:\n", else_id);
                 ret += else_branch->to_koopa();
-                ret += fmt::format("jump %{}\n", next);
+                ret += fmt::format("    jump %{}\n", next);
             }
             ret += fmt::format("%{}:\n", next);
             return ret;
@@ -486,7 +487,7 @@ namespace compiler::ast
                 operator_name = "eq";
 
             assign_result_id();
-            ret += fmt::format("%{} = {} {}, {}\n", get_result_id(),
+            ret += fmt::format("    %{} = {} {}, {}\n", get_result_id(),
                                operator_name, operand[0], operand[1]);
             return ret;
         }
@@ -583,7 +584,7 @@ namespace compiler::ast
                 operator_name = "mod";
 
             assign_result_id();
-            ret += fmt::format("%{} = {} {}, {}\n", get_result_id(),
+            ret += fmt::format("    %{} = {} {}, {}\n", get_result_id(),
                                operator_name, operand[0], operand[1]);
             return ret;
         }
@@ -676,7 +677,7 @@ namespace compiler::ast
                 operator_name = "sub";
 
             assign_result_id();
-            ret += fmt::format("%{} = {} {}, {}\n", get_result_id(),
+            ret += fmt::format("    %{} = {} {}, {}\n", get_result_id(),
                                operator_name, operand[0], operand[1]);
             return ret;
         }
@@ -777,7 +778,7 @@ namespace compiler::ast
                 operator_name = "ge";
 
             assign_result_id();
-            ret += fmt::format("%{} = {} {}, {}\n", get_result_id(),
+            ret += fmt::format("    %{} = {} {}, {}\n", get_result_id(),
                                operator_name, operand[0], operand[1]);
             return ret;
         }
@@ -870,7 +871,7 @@ namespace compiler::ast
                 operator_name = "ne";
 
             assign_result_id();
-            ret += fmt::format("%{} = {} {}, {}\n", get_result_id(),
+            ret += fmt::format("    %{} = {} {}, {}\n", get_result_id(),
                                operator_name, operand[0], operand[1]);
             return ret;
         }
@@ -934,8 +935,8 @@ namespace compiler::ast
             std::string next = new_sequential_id();
             int temp_result_id = new_result_id();
 
-            ret += fmt::format("%{} = alloc i32\n", temp_result_id);
-            ret += fmt::format("store 1, %{}\n", temp_result_id);
+            ret += fmt::format("    %{} = alloc i32\n", temp_result_id);
+            ret += fmt::format("    store 1, %{}\n", temp_result_id);
 
             if (auto const_value = land_expression->get_inline_number())
                 operand[0] = std::to_string(*const_value);
@@ -947,7 +948,7 @@ namespace compiler::ast
             }
 
             // Short circuit.
-            ret += fmt::format("br {}, %{}, %{}\n", operand[0], true_branch,
+            ret += fmt::format("    br {}, %{}, %{}\n", operand[0], true_branch,
                                false_branch);
 
             ret += fmt::format("%{}:\n", true_branch);
@@ -965,28 +966,28 @@ namespace compiler::ast
                 for (size_t i = 0; i < 2; i++)
                 {
                     bool_value[i] = new_result_id();
-                    ret += fmt::format("%{} = ne {}, 0\n", bool_value[i],
+                    ret += fmt::format("    %{} = ne {}, 0\n", bool_value[i],
                                        operand[i]);
                 }
 
                 int bool_result = new_result_id();
-                ret += fmt::format("%{} = and %{}, %{}\n", bool_result,
+                ret += fmt::format("    %{} = and %{}, %{}\n", bool_result,
                                    bool_value[0], bool_value[1]);
-                ret += fmt::format("store %{}, %{}\n", bool_result,
+                ret += fmt::format("    store %{}, %{}\n", bool_result,
                                    temp_result_id);
 
-                ret += fmt::format("jump %{}\n", next);
+                ret += fmt::format("    jump %{}\n", next);
             }
 
             ret += fmt::format("%{}:\n", false_branch);
             {
-                ret += fmt::format("store 0, %{}\n", temp_result_id);
-                ret += fmt::format("jump %{}\n", next);
+                ret += fmt::format("    store 0, %{}\n", temp_result_id);
+                ret += fmt::format("    jump %{}\n", next);
             }
 
             ret += fmt::format("%{}:\n", next);
             assign_result_id();
-            ret += fmt::format("%{} = load %{}\n", get_result_id(),
+            ret += fmt::format("    %{} = load %{}\n", get_result_id(),
                                temp_result_id);
 
             return ret;
@@ -1053,8 +1054,8 @@ namespace compiler::ast
             std::string next = new_sequential_id();
             int temp_result_id = new_result_id();
 
-            ret += fmt::format("%{} = alloc i32\n", temp_result_id);
-            ret += fmt::format("store 0, %{}\n", temp_result_id);
+            ret += fmt::format("    %{} = alloc i32\n", temp_result_id);
+            ret += fmt::format("    store 0, %{}\n", temp_result_id);
 
             if (auto const_value = lor_expression->get_inline_number())
                 operand[0] = std::to_string(*const_value);
@@ -1066,7 +1067,7 @@ namespace compiler::ast
             }
 
             // Short circuit.
-            ret += fmt::format("br {}, %{}, %{}\n", operand[0], true_branch,
+            ret += fmt::format("    br {}, %{}, %{}\n", operand[0], true_branch,
                                false_branch);
 
             ret += fmt::format("%{}:\n", false_branch);
@@ -1084,28 +1085,28 @@ namespace compiler::ast
                 for (size_t i = 0; i < 2; i++)
                 {
                     bool_value[i] = new_result_id();
-                    ret += fmt::format("%{} = ne {}, 0\n", bool_value[i],
+                    ret += fmt::format("    %{} = ne {}, 0\n", bool_value[i],
                                        operand[i]);
                 }
 
                 int bool_result = new_result_id();
-                ret += fmt::format("%{} = or %{}, %{}\n", bool_result,
+                ret += fmt::format("    %{} = or %{}, %{}\n", bool_result,
                                    bool_value[0], bool_value[1]);
-                ret += fmt::format("store %{}, %{}\n", bool_result,
+                ret += fmt::format("    store %{}, %{}\n", bool_result,
                                    temp_result_id);
 
-                ret += fmt::format("jump %{}\n", next);
+                ret += fmt::format("    jump %{}\n", next);
             }
 
             ret += fmt::format("%{}:\n", true_branch);
             {
-                ret += fmt::format("store 1, %{}\n", temp_result_id);
-                ret += fmt::format("jump %{}\n", next);
+                ret += fmt::format("    store 1, %{}\n", temp_result_id);
+                ret += fmt::format("    jump %{}\n", next);
             }
 
             ret += fmt::format("%{}:\n", next);
             assign_result_id();
-            ret += fmt::format("%{} = load %{}\n", get_result_id(),
+            ret += fmt::format("    %{} = load %{}\n", get_result_id(),
                                temp_result_id);
 
             return ret;
@@ -1316,7 +1317,8 @@ namespace compiler::ast
 
             auto symbol = std::get<symbol_variable_t>(*st.at(raw_name));
             auto type = base_type->to_koopa();
-            return fmt::format("@{} = alloc {}\n", symbol.internal_name, type);
+            return fmt::format("    @{} = alloc {}\n", symbol.internal_name,
+                               type);
         }
     };
 
@@ -1356,7 +1358,7 @@ namespace compiler::ast
             }
 
             auto symbol = std::get<symbol_variable_t>(*st.at(raw_name));
-            ret += fmt::format("store {}, @{}\n", initial_value_holder,
+            ret += fmt::format("    store {}, @{}\n", initial_value_holder,
                                symbol.internal_name);
 
             return ret;
@@ -1413,7 +1415,7 @@ namespace compiler::ast
         {
             assign_result_id(); // Always assign a new id to load.
             auto symbol = std::get<symbol_variable_t>(*st.at(raw_name));
-            return fmt::format("%{} = load @{}\n", get_result_id(),
+            return fmt::format("    %{} = load @{}\n", get_result_id(),
                                symbol.internal_name);
         }
     };
@@ -1440,7 +1442,7 @@ namespace compiler::ast
             auto symbol =
                 std::get<symbol_variable_t>(*st.at(ast_lvalue->raw_name));
 
-            ret += fmt::format("store {}, @{}\n", expression_holder,
+            ret += fmt::format("    store {}, @{}\n", expression_holder,
                                symbol.internal_name);
         }
         return ret;
