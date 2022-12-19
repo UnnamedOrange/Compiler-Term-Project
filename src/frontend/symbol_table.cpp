@@ -22,8 +22,11 @@ void symbol_table_t::insert(const std::string& raw_name, symbol_t symbol)
 {
     std::visit(
         [&](auto& symbol) {
-            symbol.internal_name =
+            auto original_internal_name =
                 fmt::format("{}_{}", raw_name, table_stack.size());
+            symbol.internal_name =
+                fmt::format("{}_{}", original_internal_name,
+                            ++use_count[original_internal_name]);
         },
         symbol);
     table_stack.back()[raw_name] = symbol;
