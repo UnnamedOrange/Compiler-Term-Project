@@ -71,7 +71,7 @@ void yyerror(ast_t& ast, const char* s);
  * %token <<<类型>>> { <终结符枚举名> ... } // 类型在 union 中定义。
  */
 
-%token INT RETURN CONST
+%token INT RETURN CONST IF ELSE
 %token IDENTIFIER
 %token INT_LITERAL
 %token LT GT LE GE EQ NE
