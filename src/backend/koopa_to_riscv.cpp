@@ -40,6 +40,8 @@ std::string visit(const koopa_raw_return_t&);
 std::string visit(const koopa_raw_binary_t&, const koopa_raw_value_t&);
 std::string visit(const koopa_raw_load_t&, const koopa_raw_value_t&);
 std::string visit(const koopa_raw_store_t&);
+std::string visit(const koopa_raw_jump_t&);
+std::string visit(const koopa_raw_branch_t&);
 
 std::string to_riscv(const std::string& koopa)
 {
@@ -145,10 +147,14 @@ std::string visit(const koopa_raw_function_t& func)
 }
 std::string visit(const koopa_raw_basic_block_t& bb)
 {
-    // 执行一些其他的必要操作。
-    // ...
+    std::string ret;
+
+    // 为基本块增加标签。
+    ret += fmt::format("{}:\n", bb->name + 1);
     // 访问所有指令。
-    return visit(bb->insts);
+    ret += visit(bb->insts);
+
+    return ret;
 }
 std::string visit(const koopa_raw_value_t& value)
 {
@@ -175,6 +181,14 @@ std::string visit(const koopa_raw_value_t& value)
     case KOOPA_RVT_STORE:
         // 访问 store 指令。
         ret += visit(kind.data.store);
+        break;
+    case KOOPA_RVT_JUMP:
+        // 访问 jump 指令。
+        ret += visit(kind.data.jump);
+        break;
+    case KOOPA_RVT_BRANCH:
+        // 访问 br 指令。
+        ret += visit(kind.data.branch);
         break;
     default:
         // 其他类型暂时遇不到。
@@ -433,6 +447,42 @@ std::string visit(const koopa_raw_store_t& store_inst)
             ret += fmt::format("    sw {}, {}(sp)\n", reg_x, reg_y);
         }
     }
+    return ret;
+}
+std::string visit(const koopa_raw_jump_t& jump_inst)
+{
+    return fmt::format("    j {}\n", jump_inst.target->name + 1);
+}
+std::string visit(const koopa_raw_branch_t& branch_inst)
+{
+    std::string ret;
+
+    if (branch_inst.cond->kind.tag == KOOPA_RVT_INTEGER)
+    {
+        // 直接无条件跳转。
+        int value = branch_inst.cond->kind.data.integer.value;
+        if (value)
+            ret += fmt::format("    j {}\n", branch_inst.true_bb->name + 1);
+        else
+            ret += fmt::format("    j {}\n", branch_inst.false_bb->name + 1);
+    }
+    else
+    {
+        // 将变量加载到寄存器。
+        std::string reg_x = rm.reg_x;
+        size_t offset = sfm.offset(branch_inst.cond);
+        if (offset < 2048)
+            ret += fmt::format("    lw {}, {}(sp)\n", reg_x, offset);
+        else // 太大，使用 li 指令代替立即数。
+        {
+            ret += fmt::format("    li {}, {}\n", reg_x, offset);
+            ret += fmt::format("    lw {}, {}(sp)\n", reg_x, reg_x);
+        }
+        ret += fmt::format("    bnez {}, {}\n", reg_x,
+                           branch_inst.true_bb->name + 1);
+        ret += fmt::format("    j {}\n", branch_inst.false_bb->name + 1);
+    }
+
     return ret;
 }
 
