@@ -239,6 +239,28 @@ namespace compiler::ast
     };
 
     /**
+     * @brief AST of a statement.
+     * Stmt ::= "if" "(" Exp ")" Stmt ["else" Stmt];
+     *
+     * @note To avoid ambiguity, the syntax is modified in YACC.
+     */
+    class ast_statement_5_t : public ast_base_t
+    {
+    public:
+        ast_t condition_expression;
+        ast_t if_branch;
+        ast_t else_branch;
+
+    public:
+        std::string to_koopa() const override
+        {
+            std::string ret;
+            // TODO: Implement.
+            return ret;
+        }
+    };
+
+    /**
      * @brief AST of an expression.
      * Exp ::= LOrExp;
      */

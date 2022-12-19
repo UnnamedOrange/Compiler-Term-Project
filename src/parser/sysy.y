@@ -91,6 +91,7 @@ void yyerror(ast_t& ast, const char* s);
 %type nt_block
 %type nt_block_item nt_block_item_list
 %type nt_statement
+%type nt_matched_statement nt_open_statement
 %type nt_declaration nt_const_declaration nt_variable_declaration
 %type nt_base_type
 %type nt_lvalue
@@ -166,7 +167,23 @@ nt_block_item : nt_declaration | nt_statement {
     ast_block_item->item = std::get<ast_t>($1);
     $$ = ast_block_item;
 }
-nt_statement : RETURN nt_expression ';' {
+nt_statement : nt_matched_statement | nt_open_statement {
+    $$ = $1;
+}
+nt_open_statement : IF '(' nt_expression ')' nt_statement {
+    auto ast_statement = std::make_shared<ast_statement_5_t>();
+    ast_statement->condition_expression = std::get<ast_t>($3);
+    ast_statement->if_branch = std::get<ast_t>($5);
+    $$ = ast_statement;
+}
+| IF '(' nt_expression ')' nt_matched_statement ELSE nt_open_statement {
+    auto ast_statement = std::make_shared<ast_statement_5_t>();
+    ast_statement->condition_expression = std::get<ast_t>($3);
+    ast_statement->if_branch = std::get<ast_t>($5);
+    ast_statement->else_branch = std::get<ast_t>($7);
+    $$ = ast_statement;
+}
+nt_matched_statement : RETURN nt_expression ';' {
     auto ast_statement = std::make_shared<ast_statement_1_t>();
     ast_statement->expression = std::get<ast_t>($2);
     $$ = ast_statement;
@@ -189,6 +206,13 @@ nt_statement : RETURN nt_expression ';' {
 | nt_block {
     auto ast_statement = std::make_shared<ast_statement_4_t>();
     ast_statement->block = std::get<ast_t>($1);
+    $$ = ast_statement;
+}
+| IF '(' nt_expression ')' nt_matched_statement ELSE nt_matched_statement {
+    auto ast_statement = std::make_shared<ast_statement_5_t>();
+    ast_statement->condition_expression = std::get<ast_t>($3);
+    ast_statement->if_branch = std::get<ast_t>($5);
+    ast_statement->else_branch = std::get<ast_t>($7);
     $$ = ast_statement;
 }
 nt_number : INT_LITERAL {
