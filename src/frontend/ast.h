@@ -168,17 +168,7 @@ namespace compiler::ast
         ast_t block;
 
     public:
-        std::string to_koopa() const override
-        {
-            std::string ret;
-            ret += fmt::format("fun @{}() : {} {{\n", function_name,
-                               function_type->to_koopa());
-            ret += fmt::format("%{}_entry:\n", function_name);
-            ret += block->to_koopa();
-            ret += "    ret 0\n";
-            ret += "}\n";
-            return ret;
-        }
+        std::string to_koopa() const override;
     };
 
     /**
@@ -204,13 +194,6 @@ namespace compiler::ast
     public:
         ast_t type;
         std::string raw_name;
-
-    public:
-        std::string to_koopa() const override
-        {
-            // TODO: Implement.
-            return "";
-        }
     };
 
     /**
@@ -673,8 +656,44 @@ namespace compiler::ast
     public:
         std::string to_koopa() const override
         {
-            // TODO: Implement.
-            return "";
+            std::string ret;
+
+            auto symbol =
+                std::get<symbol_function_t>(*st.at(function_raw_name));
+
+            // Generate argument string.
+            std::string argument_string;
+            {
+                for (size_t i = 0; i < arguments.size(); i++)
+                {
+                    std::string single_argument_string;
+                    const auto& argument = arguments[i];
+                    if (auto const_value = argument->get_inline_number())
+                        single_argument_string = std::to_string(*const_value);
+                    else
+                    {
+                        ret += argument->to_koopa();
+                        single_argument_string =
+                            fmt::format("%{}", argument->get_result_id());
+                    }
+
+                    if (!argument_string.empty())
+                        argument_string += ", ";
+                    argument_string += single_argument_string;
+                }
+            }
+
+            // Generate prefix string.
+            std::string prefix_string;
+            if (symbol.has_return_value)
+            {
+                assign_result_id();
+                prefix_string = fmt::format("%{} = ", get_result_id());
+            }
+
+            ret += fmt::format("    {}call @{}({})\n", prefix_string,
+                               symbol.internal_name, argument_string);
+            return ret;
         }
     };
 
@@ -1620,6 +1639,65 @@ namespace compiler::ast
                                symbol.internal_name);
         }
     };
+
+    inline std::string ast_function_t::to_koopa() const
+    {
+        std::string ret;
+
+        // Insert the function into symbol table.
+        {
+            symbol_function_t symbol;
+            symbol.has_return_value = !function_type->to_koopa().empty();
+            st.insert(function_name, symbol);
+        }
+
+        st.push();
+
+        std::string parameter_string;
+        for (size_t i = 0; i < parameters.size(); i++)
+        {
+            auto param =
+                std::dynamic_pointer_cast<ast_parameter_t>(parameters[i]);
+            if (!parameter_string.empty())
+                parameter_string += ", ";
+            parameter_string += fmt::format("@{}: {}", param->raw_name,
+                                            param->type->to_koopa());
+        }
+
+        std::string return_type_string;
+        {
+            return_type_string = function_type->to_koopa();
+            if (!return_type_string.empty())
+                return_type_string = fmt::format(": {}", return_type_string);
+        }
+        ret += fmt::format("fun @{}({}){} {{\n", function_name,
+                           parameter_string, return_type_string);
+
+        ret += fmt::format("%{}_entry:\n", function_name);
+        for (size_t i = 0; i < parameters.size(); i++)
+        {
+            auto param =
+                std::dynamic_pointer_cast<ast_parameter_t>(parameters[i]);
+            st.insert(param->raw_name, symbol_variable_t{});
+            auto symbol = std::get<symbol_variable_t>(*st.at(param->raw_name));
+
+            ret += fmt::format("    @{} = alloc {}\n", symbol.internal_name,
+                               param->type->to_koopa());
+            ret += fmt::format("    store @{}, @{}\n", param->raw_name,
+                               symbol.internal_name);
+        }
+
+        ret += block->to_koopa();
+        if (function_type->to_koopa().empty())
+            ret += "    ret\n";
+        else
+            ret += "    ret 0\n";
+        ret += "}\n\n";
+
+        st.pop();
+
+        return ret;
+    }
 
     inline std::string ast_statement_2_t::to_koopa() const
     {

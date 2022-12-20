@@ -32,7 +32,13 @@ namespace compiler
         // TODO: Design member variables.
     };
 
-    using symbol_t = std::variant<symbol_const_t, symbol_variable_t>;
+    struct symbol_function_t : public symbol_base_t
+    {
+        bool has_return_value;
+    };
+
+    using symbol_t =
+        std::variant<symbol_const_t, symbol_variable_t, symbol_function_t>;
 
     /**
      * @brief Symbol table for frontend.
