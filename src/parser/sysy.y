@@ -350,7 +350,7 @@ nt_argument_list : nt_expression {
 | nt_expression ',' nt_argument_list {
     auto argument_list = std::make_shared<ast_argument_list_t>();
     argument_list->argument = std::get<ast_t>($1);
-    argument_list->argument = std::get<ast_t>($3);
+    argument_list->argument_list = std::dynamic_pointer_cast<ast_argument_list_t>(std::get<ast_t>($3));
     $$ = argument_list;
 }
 nt_multiply_expression : nt_unary_expression {
