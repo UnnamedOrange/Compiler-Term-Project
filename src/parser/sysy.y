@@ -221,6 +221,12 @@ nt_matched_statement : RETURN nt_expression ';' {
     ast_statement->while_branch = std::get<ast_t>($5);
     $$ = ast_statement;
 }
+| BREAK ';' {
+    $$ = std::make_shared<ast_statement_7_t>();
+}
+| CONTINUE ';' {
+    $$ = std::make_shared<ast_statement_8_t>();
+}
 nt_number : INT_LITERAL {
     $$ = $1;
 }

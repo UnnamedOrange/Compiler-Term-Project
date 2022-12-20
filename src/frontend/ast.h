@@ -80,6 +80,15 @@ namespace compiler::ast
         mutable int result_id{};
 
     public:
+        mutable std::string break_target;
+        mutable std::string continue_target;
+        void push_down(const ast_t& down) const
+        {
+            down->break_target = break_target;
+            down->continue_target = continue_target;
+        }
+
+    public:
         virtual ~ast_base_t() = default;
 
     public:
@@ -178,7 +187,10 @@ namespace compiler::ast
             std::string ret;
             st.push();
             for (const auto& item : block_items)
+            {
+                push_down(item);
                 ret += item->to_koopa();
+            }
             st.pop();
             return ret;
         }
@@ -208,7 +220,11 @@ namespace compiler::ast
         ast_t item; // Declaration or statement.
 
     public:
-        std::string to_koopa() const override { return item->to_koopa(); }
+        std::string to_koopa() const override
+        {
+            push_down(item);
+            return item->to_koopa();
+        }
     };
 
     /**
@@ -279,7 +295,11 @@ namespace compiler::ast
         ast_t block;
 
     public:
-        std::string to_koopa() const override { return block->to_koopa(); }
+        std::string to_koopa() const override
+        {
+            push_down(block);
+            return block->to_koopa();
+        }
     };
 
     /**
@@ -303,6 +323,10 @@ namespace compiler::ast
             std::string if_id = new_if_id();
             std::string else_id = get_else_id();
             std::string next = new_sequential_id();
+
+            push_down(if_branch);
+            if (else_branch)
+                push_down(else_branch);
 
             std::string condition_result;
             if (auto const_value = condition_expression->get_inline_number())
@@ -350,6 +374,9 @@ namespace compiler::ast
             std::string while_body_id = get_while_body_id();
             std::string next = new_sequential_id();
 
+            while_branch->break_target = next;
+            while_branch->continue_target = while_id;
+
             ret += fmt::format("    jump %{}\n", while_id);
 
             ret += fmt::format("%{}:\n", while_id);
@@ -379,6 +406,38 @@ namespace compiler::ast
 
             ret += fmt::format("%{}:\n", next);
 
+            return ret;
+        }
+    };
+
+    /**
+     * @brief AST of a statement.
+     * Stmt ::= "break" ";"
+     */
+    class ast_statement_7_t : public ast_base_t
+    {
+    public:
+        std::string to_koopa() const override
+        {
+            std::string ret;
+            ret += fmt::format("    jump %{}\n", break_target);
+            ret += fmt::format("%{}:\n", new_sequential_id());
+            return ret;
+        }
+    };
+
+    /**
+     * @brief AST of a statement.
+     * Stmt ::= "continue" ";"
+     */
+    class ast_statement_8_t : public ast_base_t
+    {
+    public:
+        std::string to_koopa() const override
+        {
+            std::string ret;
+            ret += fmt::format("    jump %{}\n", continue_target);
+            ret += fmt::format("%{}:\n", new_sequential_id());
             return ret;
         }
     };
