@@ -118,24 +118,53 @@ namespace compiler::ast
 
     /**
      * @brief AST of a complete program.
+     * CompUnit ::= [CompUnit] (Decl | FuncDef);
+     * Fixed:
+     * CompUnit ::= DeclOrFuncList;
      */
     class ast_program_t : public ast_base_t
     {
     public:
-        ast_t function;
+        std::vector<ast_t> declaration_or_function_items;
 
     public:
-        std::string to_koopa() const override { return function->to_koopa(); }
+        std::string to_koopa() const override
+        {
+            std::string ret;
+            for (const auto& item : declaration_or_function_items)
+                ret += item->to_koopa();
+            return ret;
+        }
+    };
+
+    /**
+     * @brief AST of a declaration or function list.
+     * DeclOrFuncList ::= (Decl | FuncDef);
+     * DeclOrFuncList ::= (Decl | FuncDef) DeclOrFuncList;
+     *
+     * @note This is a temporary type only used in syntax analysis.
+     */
+    class ast_declaration_or_function_list_t : public ast_base_t
+    {
+    public:
+        ast_t item;
+        std::shared_ptr<ast_declaration_or_function_list_t>
+            declaration_or_function_list;
     };
 
     /**
      * @brief AST of a function.
+     * FuncDef ::= FuncType IDENT "(" [FuncFParams] ")" Block;
+     * Fixed:
+     * FuncDef ::= FuncType IDENT "(" ")" Block;
+     * FuncDef ::= FuncType IDENT "(" FuncFParamList ")" Block;
      */
     class ast_function_t : public ast_base_t
     {
     public:
         ast_t function_type;
         std::string function_name;
+        std::vector<ast_t> parameters;
         ast_t block;
 
     public:
@@ -165,7 +194,41 @@ namespace compiler::ast
         {
             if (type_name == "int")
                 return "i32";
+            else if (type_name == "void")
+                return "";
             return type_name;
+        }
+    };
+
+    /**
+     * @brief AST of a parameter list.
+     * FuncFParamList ::= FuncFParam;
+     * FuncFParamList ::= FuncFParam "," FuncFParamList;
+     *
+     * @note This is a temporary type only used in syntax analysis.
+     */
+    class ast_parameter_list_t : public ast_base_t
+    {
+    public:
+        ast_t parameter;
+        std::shared_ptr<ast_parameter_list_t> parameter_list;
+    };
+
+    /**
+     * @brief AST of a parameter.
+     * FuncFParam ::= BType IDENT;
+     */
+    class ast_parameter_t : public ast_base_t
+    {
+    public:
+        ast_t base_type;
+        std::string raw_name;
+
+    public:
+        std::string to_koopa() const override
+        {
+            // TODO: Implement.
+            return "";
         }
     };
 
@@ -611,6 +674,41 @@ namespace compiler::ast
                                operator_name, operand[0], operand[1]);
             return ret;
         }
+    };
+
+    /**
+     * @brief AST of a unary expression.
+     * UnaryExp ::= IDENT "(" [FuncRParams] ")";
+     * Fixed:
+     * UnaryExp ::= IDENT "(" ")";
+     * UnaryExp ::= IDENT "(" FuncRParamList ")";
+     */
+    class ast_unary_expression_3_t : public ast_base_t
+    {
+    public:
+        std::string function_raw_name;
+        std::vector<ast_t> arguments; // An argument is an expression.
+
+    public:
+        std::string to_koopa() const override
+        {
+            // TODO: Implement.
+            return "";
+        }
+    };
+
+    /**
+     * @brief AST of a argument list.
+     * FuncRParamList ::= Exp;
+     * FuncRParamList ::= Exp "," FuncRParamList;
+     *
+     * @note This is a temporary type only used in syntax analysis.
+     */
+    class ast_argument_list_t : public ast_base_t
+    {
+    public:
+        ast_t argument;
+        std::shared_ptr<ast_argument_list_t> argument_list;
     };
 
     /**
