@@ -54,6 +54,15 @@ namespace compiler::ast
     {
         return fmt::format("lor_sc_{}", global_lor_id);
     }
+    inline int global_while_id;
+    inline std::string new_while_id()
+    {
+        return fmt::format("while_{}", ++global_while_id);
+    }
+    inline std::string get_while_body_id()
+    {
+        return fmt::format("while_body_{}", global_while_id);
+    }
     inline symbol_table_t st;
 
     class ast_base_t;
@@ -318,6 +327,58 @@ namespace compiler::ast
                 ret += fmt::format("    jump %{}\n", next);
             }
             ret += fmt::format("%{}:\n", next);
+            return ret;
+        }
+    };
+
+    /**
+     * @brief AST of a statement.
+     * Stmt ::= "while" "(" Exp ")" Stmt;
+     */
+    class ast_statement_6_t : public ast_base_t
+    {
+    public:
+        ast_t condition_expression;
+        ast_t while_branch;
+
+    public:
+        std::string to_koopa() const override
+        {
+            std::string ret;
+
+            std::string while_id = new_while_id();
+            std::string while_body_id = get_while_body_id();
+            std::string next = new_sequential_id();
+
+            ret += fmt::format("    jump %{}\n", while_id);
+
+            ret += fmt::format("%{}:\n", while_id);
+            {
+                std::string condition_result;
+                if (auto const_value =
+                        condition_expression->get_inline_number())
+                {
+                    condition_result = std::to_string(*const_value);
+                }
+                else
+                {
+                    ret += condition_expression->to_koopa();
+                    condition_result = fmt::format(
+                        "%{}", condition_expression->get_result_id());
+                }
+
+                ret += fmt::format("    br {}, %{}, %{}\n", condition_result,
+                                   while_body_id, next);
+            }
+
+            ret += fmt::format("%{}:\n", while_body_id);
+            {
+                ret += while_branch->to_koopa();
+                ret += fmt::format("    jump %{}\n", while_id);
+            }
+
+            ret += fmt::format("%{}:\n", next);
+
             return ret;
         }
     };

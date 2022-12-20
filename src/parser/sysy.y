@@ -215,6 +215,12 @@ nt_matched_statement : RETURN nt_expression ';' {
     ast_statement->else_branch = std::get<ast_t>($7);
     $$ = ast_statement;
 }
+| WHILE '(' nt_expression ')' nt_statement {
+    auto ast_statement = std::make_shared<ast_statement_6_t>();
+    ast_statement->condition_expression = std::get<ast_t>($3);
+    ast_statement->while_branch = std::get<ast_t>($5);
+    $$ = ast_statement;
+}
 nt_number : INT_LITERAL {
     $$ = $1;
 }
