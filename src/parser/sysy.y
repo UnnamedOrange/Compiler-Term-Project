@@ -91,7 +91,6 @@ void yyerror(ast_t& ast, const char* s);
 %type nt_block
 %type nt_block_item nt_block_item_list
 %type nt_statement
-%type nt_matched_statement nt_open_statement
 %type nt_declaration nt_const_declaration nt_variable_declaration
 %type nt_base_type
 %type nt_lvalue
@@ -107,6 +106,13 @@ void yyerror(ast_t& ast, const char* s);
 %type nt_equation_expression nt_equation_operator
 %type nt_land_expression
 %type nt_lor_expression
+
+/* https://stackoverflow.com/questions/12731922/reforming-the-grammar-to-remove-shift-reduce-conflict-in-if-then-else
+ * 指定 if 语句的优先级低于 if-else 语句（写在后面优先级更高）。
+ * 移进-规约冲突在 ELSE 处发生，实际上是手动指定了冲突处的动作。
+ */
+%precedence IF_STATEMENT /* 在结尾写 @prec IF_STATEMENT 指定规约的优先级。*/
+%precedence ELSE /* 指定移进 ELSE 的优先级。*/
 
 /* 第三部分：动作 */
 
@@ -167,23 +173,7 @@ nt_block_item : nt_declaration | nt_statement {
     ast_block_item->item = std::get<ast_t>($1);
     $$ = ast_block_item;
 }
-nt_statement : nt_matched_statement | nt_open_statement {
-    $$ = $1;
-}
-nt_open_statement : IF '(' nt_expression ')' nt_statement {
-    auto ast_statement = std::make_shared<ast_statement_5_t>();
-    ast_statement->condition_expression = std::get<ast_t>($3);
-    ast_statement->if_branch = std::get<ast_t>($5);
-    $$ = ast_statement;
-}
-| IF '(' nt_expression ')' nt_matched_statement ELSE nt_open_statement {
-    auto ast_statement = std::make_shared<ast_statement_5_t>();
-    ast_statement->condition_expression = std::get<ast_t>($3);
-    ast_statement->if_branch = std::get<ast_t>($5);
-    ast_statement->else_branch = std::get<ast_t>($7);
-    $$ = ast_statement;
-}
-nt_matched_statement : RETURN nt_expression ';' {
+nt_statement : RETURN nt_expression ';' {
     auto ast_statement = std::make_shared<ast_statement_1_t>();
     ast_statement->expression = std::get<ast_t>($2);
     $$ = ast_statement;
@@ -208,7 +198,13 @@ nt_matched_statement : RETURN nt_expression ';' {
     ast_statement->block = std::get<ast_t>($1);
     $$ = ast_statement;
 }
-| IF '(' nt_expression ')' nt_matched_statement ELSE nt_matched_statement {
+| IF '(' nt_expression ')' nt_statement %prec IF_STATEMENT {
+    auto ast_statement = std::make_shared<ast_statement_5_t>();
+    ast_statement->condition_expression = std::get<ast_t>($3);
+    ast_statement->if_branch = std::get<ast_t>($5);
+    $$ = ast_statement;
+}
+| IF '(' nt_expression ')' nt_statement ELSE nt_statement {
     auto ast_statement = std::make_shared<ast_statement_5_t>();
     ast_statement->condition_expression = std::get<ast_t>($3);
     ast_statement->if_branch = std::get<ast_t>($5);
