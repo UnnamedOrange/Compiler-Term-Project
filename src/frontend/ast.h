@@ -182,25 +182,6 @@ namespace compiler::ast
     };
 
     /**
-     * @brief AST of a function type.
-     */
-    class ast_function_type_t : public ast_base_t
-    {
-    public:
-        std::string type_name;
-
-    public:
-        std::string to_koopa() const override
-        {
-            if (type_name == "int")
-                return "i32";
-            else if (type_name == "void")
-                return "";
-            return type_name;
-        }
-    };
-
-    /**
      * @brief AST of a parameter list.
      * FuncFParamList ::= FuncFParam;
      * FuncFParamList ::= FuncFParam "," FuncFParamList;
@@ -221,7 +202,7 @@ namespace compiler::ast
     class ast_parameter_t : public ast_base_t
     {
     public:
-        ast_t base_type;
+        ast_t type;
         std::string raw_name;
 
     public:
@@ -1364,10 +1345,10 @@ namespace compiler::ast
     };
 
     /**
-     * @brief AST of a base type.
-     * BType ::= "int";
+     * @brief AST of a type.
+     * Type ::= "void" | "int";
      */
-    class ast_base_type_t : public ast_base_t
+    class ast_type_t : public ast_base_t
     {
     public:
         std::string type_name;
@@ -1377,6 +1358,8 @@ namespace compiler::ast
         {
             if (type_name == "int")
                 return "i32";
+            else if (type_name == "void")
+                return "";
             return type_name;
         }
     };
@@ -1390,7 +1373,7 @@ namespace compiler::ast
     class ast_const_declaration_t : public ast_base_t
     {
     public:
-        ast_t base_type;
+        ast_t type;
         std::vector<ast_t> const_definitions;
 
     public:
@@ -1423,7 +1406,7 @@ namespace compiler::ast
     class ast_const_definition_t : public ast_base_t
     {
     public:
-        std::shared_ptr<ast_base_type_t> base_type;
+        std::shared_ptr<ast_type_t> type;
         std::string raw_name;
         ast_t const_initial_value;
 
@@ -1487,7 +1470,7 @@ namespace compiler::ast
     class ast_variable_declaration_t : public ast_base_t
     {
     public:
-        ast_t base_type;
+        ast_t type;
         std::vector<ast_t> variable_definitions;
 
     public:
@@ -1522,7 +1505,7 @@ namespace compiler::ast
     class ast_variable_definition_t : public ast_base_t
     {
     public:
-        std::shared_ptr<ast_base_type_t> base_type;
+        std::shared_ptr<ast_type_t> type;
         std::string raw_name;
 
     public:
@@ -1534,9 +1517,9 @@ namespace compiler::ast
             }
 
             auto symbol = std::get<symbol_variable_t>(*st.at(raw_name));
-            auto type = base_type->to_koopa();
+            auto type_string = type->to_koopa();
             return fmt::format("    @{} = alloc {}\n", symbol.internal_name,
-                               type);
+                               type_string);
         }
     };
 
