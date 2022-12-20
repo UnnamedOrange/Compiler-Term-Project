@@ -71,7 +71,7 @@ void yyerror(ast_t& ast, const char* s);
  * %token <<<类型>>> { <终结符枚举名> ... } // 类型在 union 中定义。
  */
 
-%token INT RETURN CONST IF ELSE
+%token INT RETURN CONST IF ELSE WHILE BREAK CONTINUE
 %token IDENTIFIER
 %token INT_LITERAL
 %token LT GT LE GE EQ NE
@@ -214,6 +214,18 @@ nt_matched_statement : RETURN nt_expression ';' {
     ast_statement->if_branch = std::get<ast_t>($5);
     ast_statement->else_branch = std::get<ast_t>($7);
     $$ = ast_statement;
+}
+| WHILE '(' nt_expression ')' nt_statement {
+    auto ast_statement = std::make_shared<ast_statement_6_t>();
+    ast_statement->condition_expression = std::get<ast_t>($3);
+    ast_statement->while_branch = std::get<ast_t>($5);
+    $$ = ast_statement;
+}
+| BREAK ';' {
+    $$ = std::make_shared<ast_statement_7_t>();
+}
+| CONTINUE ';' {
+    $$ = std::make_shared<ast_statement_8_t>();
 }
 nt_number : INT_LITERAL {
     $$ = $1;
