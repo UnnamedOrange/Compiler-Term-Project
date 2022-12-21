@@ -131,6 +131,38 @@ namespace compiler::ast
         std::string to_koopa() const override
         {
             std::string ret;
+
+            // 将库函数加入到符号表。
+            {
+                std::array lib_functions{
+                    symbol_function_t{"getint", true},
+                    symbol_function_t{"getch", true},
+                    symbol_function_t{"getarray", true},
+                    symbol_function_t{"putint", false},
+                    symbol_function_t{"putch", false},
+                    symbol_function_t{"putarray", false},
+                    symbol_function_t{"starttime", false},
+                    symbol_function_t{"stoptime", false},
+                };
+                for (size_t i = 0; i < lib_functions.size(); i++)
+                {
+                    const auto& symbol = lib_functions[i];
+                    st.insert(symbol.internal_name, symbol);
+                }
+            }
+
+            // 输出库函数的声明。
+            ret += R"(decl @getint(): i32
+decl @getch(): i32
+decl @getarray(*i32): i32
+decl @putint(i32)
+decl @putch(i32)
+decl @putarray(i32, *i32)
+decl @starttime()
+decl @stoptime()
+
+)";
+
             for (const auto& item : declaration_or_function_items)
                 ret += item->to_koopa();
             return ret;

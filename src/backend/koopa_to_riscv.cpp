@@ -98,6 +98,10 @@ std::string visit(const koopa_raw_slice_t& slice)
 }
 std::string visit(const koopa_raw_function_t& func)
 {
+    // 如果是声明，则跳过。
+    if (!func->bbs.len)
+        return "";
+
     current_function = func;
 
     std::string ret;
