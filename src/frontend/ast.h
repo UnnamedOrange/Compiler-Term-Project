@@ -1168,6 +1168,8 @@ decl @stoptime()
             auto rvalue_1 = land_expression->get_inline_number();
             if (!rvalue_1)
                 return std::nullopt;
+            if (!(*rvalue_1))
+                return 0; // Short circuit.
             auto rvalue_2 = equation_expression->get_inline_number();
             if (!rvalue_2)
                 return std::nullopt;
@@ -1285,6 +1287,8 @@ decl @stoptime()
             auto rvalue_1 = lor_expression->get_inline_number();
             if (!rvalue_1)
                 return std::nullopt;
+            if (*rvalue_1)
+                return 1; // Short circuit.
             auto rvalue_2 = land_expression->get_inline_number();
             if (!rvalue_2)
                 return std::nullopt;
