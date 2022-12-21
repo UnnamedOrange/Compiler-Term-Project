@@ -11,6 +11,7 @@
 
 #include <array>
 #include <cassert>
+#include <cstdint>
 #include <iostream>
 #include <map>
 #include <stdexcept>
@@ -30,6 +31,8 @@ using namespace compiler;
 register_manager rm;
 stack_frame_manager sfm;
 
+koopa_raw_function_t current_function;
+
 std::string to_riscv(const std::string&);
 std::string visit(const koopa_raw_program_t&);
 std::string visit(const koopa_raw_slice_t&);
@@ -42,6 +45,7 @@ std::string visit(const koopa_raw_load_t&, const koopa_raw_value_t&);
 std::string visit(const koopa_raw_store_t&);
 std::string visit(const koopa_raw_jump_t&);
 std::string visit(const koopa_raw_branch_t&);
+std::string visit(const koopa_raw_call_t&, const koopa_raw_value_t&);
 
 std::string to_riscv(const std::string& koopa)
 {
@@ -59,14 +63,7 @@ std::string visit(const koopa_raw_program_t& program)
 {
     std::string ret;
     // 访问所有全局变量。
-    ret += "    .text\n";
     ret += visit(program.values);
-    for (size_t i = 0; i < program.funcs.len; ++i)
-    {
-        auto entry =
-            reinterpret_cast<koopa_raw_function_t>(program.funcs.buffer[i]);
-        ret += fmt::format("    .globl {}\n", entry->name + 1);
-    }
     // 访问所有函数。
     ret += visit(program.funcs);
     return ret;
@@ -74,7 +71,7 @@ std::string visit(const koopa_raw_program_t& program)
 std::string visit(const koopa_raw_slice_t& slice)
 {
     std::string ret;
-    for (size_t i = 0; i < slice.len; ++i)
+    for (uint32_t i = 0; i < slice.len; ++i)
     {
         auto ptr = slice.buffer[i];
         // 根据 slice 的 kind 决定将 ptr 视作何种元素。
@@ -101,47 +98,83 @@ std::string visit(const koopa_raw_slice_t& slice)
 }
 std::string visit(const koopa_raw_function_t& func)
 {
-    auto ret = fmt::format("{}:\n", func->name + 1);
+    current_function = func;
+
+    std::string ret;
+
+    ret += "    .text\n";
+    ret += fmt::format("    .globl {}\n", func->name + 1);
+    ret += fmt::format("{}:\n", func->name + 1);
 
     // 重置栈帧。
     sfm.clear();
     // 扫描函数中的所有指令, 算出需要分配的栈空间总量。
     {
+        sfm.alloc_upper(4); // 为了方便，总是保存返回地址。
+
+        uint32_t max_parameter_count = 0;
+
         auto basic_blocks = func->bbs;
-        for (size_t i = 0; i < basic_blocks.len; i++)
+        for (uint32_t i = 0; i < basic_blocks.len; i++)
         {
             auto basic_block_ptr = reinterpret_cast<koopa_raw_basic_block_t>(
                 basic_blocks.buffer[i]);
             auto basic_block = basic_block_ptr->insts;
-            for (size_t j = 0; j < basic_block.len; j++)
+            for (uint32_t j = 0; j < basic_block.len; j++)
             {
                 auto instruction =
                     reinterpret_cast<koopa_raw_value_t>(basic_block.buffer[j]);
-                // 为涉及的变量分配栈空间。
+                // 为涉及的变量、参数、返回地址分配栈空间。
                 {
-                    if (instruction->ty->tag == KOOPA_RTT_UNIT)
-                        continue; // 没有返回值，跳过。
-                    // 暂时认为都是 int32_t。
-                    sfm.alloc(instruction, 4);
-                    // 不用单独考虑操作数，因为操作数一定是算出来的。
+                    if (instruction->kind.tag == KOOPA_RVT_CALL)
+                    {
+                        max_parameter_count =
+                            std::max(max_parameter_count,
+                                     instruction->kind.data.call.args.len);
+                    }
+
+                    if (instruction->ty->tag != KOOPA_RTT_UNIT)
+                    {
+                        // 暂时认为都是 int32_t。
+                        sfm.alloc(instruction, 4);
+                        // 不用单独考虑操作数，因为操作数一定是算出来的。
+                    }
                 }
             }
         }
+        sfm.alloc_lower(max_parameter_count * 4);
     }
     // 计算实际的栈帧大小，并生成导言。
-    size_t stack_frame_size =
-        (sfm.size() + 15) / 16 * 16; // 向上取整到 16 的倍数。
-    if (stack_frame_size <= 2048)    // [-2048, 2047]
-        ret += fmt::format("    addi sp, sp, -{}\n", stack_frame_size);
-    else // 太大，使用 li 指令代替立即数。
     {
-        ret += fmt::format("    li {}, -{}\n", rm.reg_y, stack_frame_size);
-        ret += fmt::format("    add sp, sp, {}\n", rm.reg_y);
+        size_t stack_frame_size = sfm.rounded_size();
+        if (stack_frame_size <= 2048) // [-2048, 2047]
+            ret += fmt::format("    addi sp, sp, -{}\n", stack_frame_size);
+        else // 太大，使用 li 指令代替立即数。
+        {
+            ret += fmt::format("    li {}, -{}\n", rm.reg_y, stack_frame_size);
+            ret += fmt::format("    add sp, sp, {}\n", rm.reg_y);
+        }
+    }
+
+    // 保存 ra 寄存器的值。
+    {
+        auto reg_ra = rm.reg_ra;
+        auto reg_x = rm.reg_x;
+        auto offset_ra = sfm.offset_upper();
+        if (offset_ra < 2048)
+            ret += fmt::format("    sw {}, {}(sp)\n", reg_ra, offset_ra);
+        else // 太大，使用 li 指令代替立即数。
+        {
+            ret += fmt::format("    li {}, {}\n", reg_x, offset_ra);
+            ret += fmt::format("    sw {}, {}(sp)\n", reg_ra, reg_x);
+        }
     }
 
     // 访问所有基本块。
     ret += visit(func->bbs);
     // 后记在 return 指令处生成。
+
+    ret += "\n";
 
     return ret;
 }
@@ -190,6 +223,10 @@ std::string visit(const koopa_raw_value_t& value)
         // 访问 br 指令。
         ret += visit(kind.data.branch);
         break;
+    case KOOPA_RVT_CALL:
+        // 访问 call 指令。
+        ret += visit(kind.data.call, value);
+        break;
     default:
         // 其他类型暂时遇不到。
         assert(false);
@@ -201,36 +238,57 @@ std::string visit(const koopa_raw_return_t& return_inst)
     std::string ret;
     std::string reg_ret = rm.reg_ret;
 
-    // 生成保存返回值的指令。
-    if (return_inst.value->kind.tag == KOOPA_RVT_INTEGER)
-        ret += fmt::format("    li {}, {}\n", reg_ret,
-                           return_inst.value->kind.data.integer.value);
-    else
+    // 如果有返回值，则将返回值写入寄存器。
+    if (return_inst.value)
     {
-        // 将变量加载到寄存器。
-        size_t offset = sfm.offset(return_inst.value);
-        if (offset < 2048)
-            ret += fmt::format("    lw {}, {}(sp)\n", reg_ret, offset);
+        // 生成保存返回值的指令。
+        if (return_inst.value->kind.tag == KOOPA_RVT_INTEGER)
+            ret += fmt::format("    li {}, {}\n", reg_ret,
+                               return_inst.value->kind.data.integer.value);
+        else
+        {
+            // 将变量加载到寄存器。
+            auto offset = sfm.offset(return_inst.value);
+            if (offset < 2048)
+                ret += fmt::format("    lw {}, {}(sp)\n", reg_ret, offset);
+            else // 太大，使用 li 指令代替立即数。
+            {
+                ret += fmt::format("    li {}, {}\n", reg_ret, offset);
+                ret += fmt::format("    lw {}, {}(sp)\n", reg_ret, reg_ret);
+            }
+        }
+    }
+    // 否则直接生成后记。
+
+    // 恢复返回地址。
+    {
+        auto reg_ra = rm.reg_ra;
+        auto reg_x = rm.reg_x;
+        auto offset_ra = sfm.offset_upper();
+        if (offset_ra < 2048)
+            ret += fmt::format("    lw {}, {}(sp)\n", reg_ra, offset_ra);
         else // 太大，使用 li 指令代替立即数。
         {
-            ret += fmt::format("    li {}, {}\n", reg_ret, offset);
-            ret += fmt::format("    lw {}, {}(sp)\n", reg_ret, reg_ret);
+            ret += fmt::format("    li {}, {}\n", reg_x, offset_ra);
+            ret += fmt::format("    lw {}, {}(sp)\n", reg_ra, reg_x);
         }
     }
 
-    // 计算实际的栈帧大小，并生成后记。
-    size_t stack_frame_size =
-        (sfm.size() + 15) / 16 * 16; // 向上取整到 16 的倍数。
-    if (stack_frame_size < 2048)     // [-2048, 2047]
-        ret += fmt::format("    addi sp, sp, {}\n", stack_frame_size);
-    else // 太大，使用 li 指令代替立即数。
+    // 计算实际的栈帧大小。
     {
-        ret += fmt::format("    li {}, {}\n", rm.reg_y, stack_frame_size);
-        ret += fmt::format("    add sp, sp, {}\n", rm.reg_y);
+        size_t stack_frame_size = sfm.rounded_size();
+        if (stack_frame_size < 2048) // [-2048, 2047]
+            ret += fmt::format("    addi sp, sp, {}\n", stack_frame_size);
+        else // 太大，使用 li 指令代替立即数。
+        {
+            ret += fmt::format("    li {}, {}\n", rm.reg_y, stack_frame_size);
+            ret += fmt::format("    add sp, sp, {}\n", rm.reg_y);
+        }
     }
 
     // 生成 ret 指令。
     ret += fmt::format("    ret\n");
+
     return ret;
 }
 std::string visit(const koopa_raw_binary_t& binary_inst,
@@ -253,7 +311,7 @@ std::string visit(const koopa_raw_binary_t& binary_inst,
     else
     {
         // 将变量加载到寄存器。
-        size_t offset = sfm.offset(binary_inst.lhs);
+        auto offset = sfm.offset(binary_inst.lhs);
         if (offset < 2048)
             ret += fmt::format("    lw {}, {}(sp)\n", reg_y, offset);
         else // 太大，使用 li 指令代替立即数。
@@ -275,7 +333,7 @@ std::string visit(const koopa_raw_binary_t& binary_inst,
     else
     {
         // 将变量加载到寄存器。
-        size_t offset = sfm.offset(binary_inst.rhs);
+        auto offset = sfm.offset(binary_inst.rhs);
         if (offset < 2048)
             ret += fmt::format("    lw {}, {}(sp)\n", reg_z, offset);
         else // 太大，使用 li 指令代替立即数。
@@ -368,7 +426,7 @@ std::string visit(const koopa_raw_binary_t& binary_inst,
 
     // 将结果保存至内存。
     {
-        size_t offset = sfm.offset(parent_value);
+        auto offset = sfm.offset(parent_value);
         if (offset < 2048)
             ret += fmt::format("    sw {}, {}(sp)\n", reg_x, offset);
         else // 太大，使用 li 指令代替立即数。
@@ -388,7 +446,7 @@ std::string visit(const koopa_raw_load_t& load_inst,
 
     // 将变量加载到寄存器。
     {
-        size_t offset = sfm.offset(load_inst.src);
+        auto offset = sfm.offset(load_inst.src);
         if (offset < 2048)
             ret += fmt::format("    lw {}, {}(sp)\n", reg_x, offset);
         else // 太大，使用 li 指令代替立即数。
@@ -400,7 +458,7 @@ std::string visit(const koopa_raw_load_t& load_inst,
 
     // 将结果保存至内存。
     {
-        size_t offset = sfm.offset(parent_value);
+        auto offset = sfm.offset(parent_value);
         if (offset < 2048)
             ret += fmt::format("    sw {}, {}(sp)\n", reg_x, offset);
         else // 太大，使用 li 指令代替立即数。
@@ -425,8 +483,27 @@ std::string visit(const koopa_raw_store_t& store_inst)
                                store_inst.value->kind.data.integer.value);
         else // 将变量加载到寄存器。
         {
-            size_t offset = sfm.offset(store_inst.value);
-            if (offset < 2048)
+            int offset;
+            if (!sfm.count(store_inst.value))
+            {
+                // 如果栈帧中没有这个变量，说明是第一次读取参数。计算出参数的偏移量。
+                uint32_t argument_index{};
+                for (; argument_index < current_function->params.len;
+                     argument_index++)
+                {
+                    if (store_inst.value ==
+                        current_function->params.buffer[argument_index])
+                        break;
+                }
+                assert(argument_index != current_function->params.len);
+
+                // 根据参数的序号计算出偏移量。
+                offset = sfm.rounded_size() + 4 * argument_index;
+            }
+            else // 否则照常从栈帧中直接找到变量。
+                offset = sfm.offset(store_inst.value);
+
+            if (-2048 <= offset && offset < 2048)
                 ret += fmt::format("    lw {}, {}(sp)\n", reg_x, offset);
             else // 太大，使用 li 指令代替立即数。
             {
@@ -438,7 +515,7 @@ std::string visit(const koopa_raw_store_t& store_inst)
 
     // 将结果保存至内存。
     {
-        size_t offset = sfm.offset(store_inst.dest);
+        auto offset = sfm.offset(store_inst.dest);
         if (offset < 2048)
             ret += fmt::format("    sw {}, {}(sp)\n", reg_x, offset);
         else // 太大，使用 li 指令代替立即数。
@@ -470,7 +547,7 @@ std::string visit(const koopa_raw_branch_t& branch_inst)
     {
         // 将变量加载到寄存器。
         std::string reg_x = rm.reg_x;
-        size_t offset = sfm.offset(branch_inst.cond);
+        auto offset = sfm.offset(branch_inst.cond);
         if (offset < 2048)
             ret += fmt::format("    lw {}, {}(sp)\n", reg_x, offset);
         else // 太大，使用 li 指令代替立即数。
@@ -481,6 +558,74 @@ std::string visit(const koopa_raw_branch_t& branch_inst)
         ret += fmt::format("    bnez {}, {}\n", reg_x,
                            branch_inst.true_bb->name + 1);
         ret += fmt::format("    j {}\n", branch_inst.false_bb->name + 1);
+    }
+
+    return ret;
+}
+std::string visit(const koopa_raw_call_t& call_inst,
+                  const koopa_raw_value_t& parent_value)
+{
+    std::string ret;
+
+    // 将所有参数存入栈中。
+    for (uint32_t i = 0; i < call_inst.args.len; i++)
+    {
+        auto argument =
+            reinterpret_cast<koopa_raw_value_t>(call_inst.args.buffer[i]);
+
+        std::string reg_x = rm.reg_x; // 保存值的寄存器。
+        std::string reg_y = rm.reg_y; // 保存偏移量的寄存器。
+        // 将参数写入寄存器。
+        if (argument->kind.tag == KOOPA_RVT_INTEGER)
+        {
+            // 将立即数写入寄存器。
+            ret += fmt::format("    li {}, {}\n", reg_x,
+                               argument->kind.data.integer.value);
+        }
+        else
+        {
+            // 将变量加载到寄存器。
+            auto offset = sfm.offset(argument);
+            if (offset < 2048)
+                ret += fmt::format("    lw {}, {}(sp)\n", reg_x, offset);
+            else // 太大，使用 li 指令代替立即数。
+            {
+                ret += fmt::format("    li {}, {}\n", reg_x, offset);
+                ret += fmt::format("    lw {}, {}(sp)\n", reg_x, reg_x);
+            }
+        }
+
+        // 将寄存器中的参数写入栈。
+        {
+            auto offset = sfm.offset_lower() + i * 4;
+            if (offset < 2048)
+                ret += fmt::format("    sw {}, {}(sp)\n", reg_x, offset);
+            else // 太大，使用 li 指令代替立即数。
+            {
+                ret += fmt::format("    li {}, {}\n", reg_y, offset);
+                ret += fmt::format("    sw {}, {}(sp)\n", reg_x, reg_y);
+            }
+        }
+    }
+
+    // 生成 call 指令。
+    {
+        ret += fmt::format("    call {}\n", call_inst.callee->name + 1);
+    }
+
+    // 如果函数有返回值，将返回值保存。
+    if (parent_value->ty->tag != KOOPA_RTT_UNIT)
+    {
+        std::string reg_ret = rm.reg_ret; // 保存返回值的寄存器。
+        std::string reg_x = rm.reg_x;     // 保存偏移量的寄存器。
+        auto offset = sfm.offset(parent_value);
+        if (offset < 2048)
+            ret += fmt::format("    sw {}, {}(sp)\n", reg_ret, offset);
+        else // 太大，使用 li 指令代替立即数。
+        {
+            ret += fmt::format("    li {}, {}\n", reg_x, offset);
+            ret += fmt::format("    sw {}, {}(sp)\n", reg_ret, reg_x);
+        }
     }
 
     return ret;

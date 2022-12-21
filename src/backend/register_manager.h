@@ -34,6 +34,7 @@ namespace compiler
 #endif
 
     public:
+        inline static constexpr auto reg_ra = "ra";
         inline static constexpr auto reg_ret = "a0";
         inline static constexpr auto reg_x = "t1";
         inline static constexpr auto reg_y = "t2";
