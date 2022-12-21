@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include <cassert>
 #include <memory>
 #include <optional>
 #include <string>
@@ -1562,6 +1563,8 @@ decl @stoptime()
     public:
         std::string to_koopa() const override
         {
+            std::string ret;
+
             {
                 symbol_variable_t symbol;
                 st.insert(raw_name, std::move(symbol));
@@ -1569,8 +1572,20 @@ decl @stoptime()
 
             auto symbol = std::get<symbol_variable_t>(*st.at(raw_name));
             auto type_string = type->to_koopa();
-            return fmt::format("    @{} = alloc {}\n", symbol.internal_name,
-                               type_string);
+
+            if (st.is_global(raw_name))
+            {
+                ret += fmt::format(
+                    "global @{} = alloc {}, ", // This line does not end.
+                    symbol.internal_name, type_string);
+            }
+            else
+            {
+                ret += fmt::format("    @{} = alloc {}\n", symbol.internal_name,
+                                   type_string);
+            }
+
+            return ret;
         }
     };
 
@@ -1580,6 +1595,14 @@ decl @stoptime()
      */
     class ast_variable_definition_1_t : public ast_variable_definition_t
     {
+    public:
+        std::string to_koopa() const override
+        {
+            auto ret = ast_variable_definition_t::to_koopa();
+            if (st.is_global(raw_name))
+                ret += "zeroinit\n\n";
+            return ret;
+        }
     };
 
     /**
@@ -1597,8 +1620,9 @@ decl @stoptime()
             auto ret = ast_variable_definition_t::to_koopa();
 
             std::string initial_value_holder;
+            auto const_initial_value = initial_value->get_inline_number();
+            // 判断初始化表达式是否是常量值。
             {
-                auto const_initial_value = initial_value->get_inline_number();
                 if (const_initial_value)
                     initial_value_holder = std::to_string(*const_initial_value);
                 else
@@ -1609,9 +1633,18 @@ decl @stoptime()
                 }
             }
 
-            auto symbol = std::get<symbol_variable_t>(*st.at(raw_name));
-            ret += fmt::format("    store {}, @{}\n", initial_value_holder,
-                               symbol.internal_name);
+            if (st.is_global(raw_name))
+            {
+                // 只允许使用常量表达式初始化全局变量。
+                assert(const_initial_value);
+                ret += fmt::format("{}\n\n", *const_initial_value);
+            }
+            else
+            {
+                auto symbol = std::get<symbol_variable_t>(*st.at(raw_name));
+                ret += fmt::format("    store {}, @{}\n", initial_value_holder,
+                                   symbol.internal_name);
+            }
 
             return ret;
         }

@@ -78,5 +78,10 @@ namespace compiler
          * @brief Query a symbol according to its raw name.
          */
         std::optional<symbol_t> at(const std::string& raw_name) const;
+        /**
+         * @brief Query whether a symbol is global.
+         * If the symbol does not exist, returns false.
+         */
+        bool is_global(const std::string& raw_name) const;
     };
 } // namespace compiler

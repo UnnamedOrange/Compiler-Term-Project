@@ -56,3 +56,17 @@ std::optional<symbol_t> symbol_table_t::at(const std::string& raw_name) const
             return (*it).at(raw_name);
     return std::nullopt;
 }
+bool symbol_table_t::is_global(const std::string& raw_name) const
+{
+    for (size_t i = table_stack.size() - 1; ~i; i--)
+    {
+        if (table_stack[i].count(raw_name))
+        {
+            if (i)
+                return false;
+            else
+                return true;
+        }
+    }
+    return false;
+}
