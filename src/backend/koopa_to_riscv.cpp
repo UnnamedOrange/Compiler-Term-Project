@@ -146,7 +146,8 @@ std::string visit(const koopa_raw_function_t& func)
                 }
             }
         }
-        sfm.alloc_lower(max_parameter_count * 4);
+        if (max_parameter_count > 8)
+            sfm.alloc_lower((max_parameter_count - 8) * 4);
     }
     // 计算实际的栈帧大小，并生成导言。
     {
@@ -488,6 +489,7 @@ std::string visit(const koopa_raw_store_t& store_inst)
         else // 将变量加载到寄存器。
         {
             int offset;
+            std::string argument_register;
             if (!sfm.count(store_inst.value))
             {
                 // 如果栈帧中没有这个变量，说明是第一次读取参数。计算出参数的偏移量。
@@ -501,19 +503,27 @@ std::string visit(const koopa_raw_store_t& store_inst)
                 }
                 assert(argument_index != current_function->params.len);
 
-                // 根据参数的序号计算出偏移量。
-                offset = sfm.rounded_size() + 4 * argument_index;
+                // 根据参数的序号计算出寄存器或偏移量。
+                if (argument_index < 8)
+                    argument_register = fmt::format("a{}", argument_index);
+                else
+                    offset = sfm.rounded_size() + 4 * (argument_index - 8);
             }
             else // 否则照常从栈帧中直接找到变量。
                 offset = sfm.offset(store_inst.value);
 
-            if (-2048 <= offset && offset < 2048)
-                ret += fmt::format("    lw {}, {}(sp)\n", reg_x, offset);
-            else // 太大，使用 li 指令代替立即数。
+            if (argument_register.empty()) // 不对应寄存器，从内存中加载参数。
             {
-                ret += fmt::format("    li {}, {}\n", reg_y, offset);
-                ret += fmt::format("    lw {}, {}(sp)\n", reg_x, reg_y);
+                if (-2048 <= offset && offset < 2048)
+                    ret += fmt::format("    lw {}, {}(sp)\n", reg_x, offset);
+                else // 太大，使用 li 指令代替立即数。
+                {
+                    ret += fmt::format("    li {}, {}\n", reg_y, offset);
+                    ret += fmt::format("    lw {}, {}(sp)\n", reg_x, reg_y);
+                }
             }
+            else // 将参数从寄存器保存到内存中。
+                ret += fmt::format("    mv {}, {}\n", reg_x, argument_register);
         }
     }
 
@@ -571,8 +581,36 @@ std::string visit(const koopa_raw_call_t& call_inst,
 {
     std::string ret;
 
-    // 将所有参数存入栈中。
-    for (uint32_t i = 0; i < call_inst.args.len; i++)
+    // 将序号小于等于 8 的参数放入寄存器中。
+    for (uint32_t i = 0; i < std::min(8u, call_inst.args.len); i++)
+    {
+        auto argument =
+            reinterpret_cast<koopa_raw_value_t>(call_inst.args.buffer[i]);
+
+        std::string reg_x = fmt::format("a{}", i); // 保存值的寄存器。
+        // 将参数写入寄存器。
+        if (argument->kind.tag == KOOPA_RVT_INTEGER)
+        {
+            // 将立即数写入寄存器。
+            ret += fmt::format("    li {}, {}\n", reg_x,
+                               argument->kind.data.integer.value);
+        }
+        else
+        {
+            // 将变量加载到寄存器。
+            auto offset = sfm.offset(argument);
+            if (offset < 2048)
+                ret += fmt::format("    lw {}, {}(sp)\n", reg_x, offset);
+            else // 太大，使用 li 指令代替立即数。
+            {
+                ret += fmt::format("    li {}, {}\n", reg_x, offset);
+                ret += fmt::format("    lw {}, {}(sp)\n", reg_x, reg_x);
+            }
+        }
+    }
+
+    // 将序号大于 8 的参数存入栈中。
+    for (uint32_t i = 8; i < call_inst.args.len; i++)
     {
         auto argument =
             reinterpret_cast<koopa_raw_value_t>(call_inst.args.buffer[i]);
@@ -601,7 +639,7 @@ std::string visit(const koopa_raw_call_t& call_inst,
 
         // 将寄存器中的参数写入栈。
         {
-            auto offset = sfm.offset_lower() + i * 4;
+            auto offset = sfm.offset_lower() + (i - 8) * 4;
             if (offset < 2048)
                 ret += fmt::format("    sw {}, {}(sp)\n", reg_x, offset);
             else // 太大，使用 li 指令代替立即数。
