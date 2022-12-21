@@ -32,7 +32,7 @@ Additional scripts:
 
 - `build.sh`
 
-  CMake configure and build. Used only in Docker command line.
+  CMake configure and build.
 
   Example:
 
@@ -42,7 +42,7 @@ Additional scripts:
 
 - `koopa.sh`
 
-  Call `compiler -koopa ... -o ...` manually using cases in [case](./case) folder. You only need to specify ID. Should call `build.sh` beforehand. Used only in Docker command line.
+  Call `compiler -koopa ... -o ...` manually using cases in [case](./case) folder. You only need to specify ID. Should call `build.sh` beforehand.
 
   Example:
 
@@ -52,12 +52,22 @@ Additional scripts:
 
 - `riscv.sh`
 
-  Call `compiler -riscv ... -o ...` manually using cases in [case](./case) folder. You only need to specify ID. Should call `build.sh` beforehand. Used only in Docker command line.
+  Call `compiler -riscv ... -o ...` manually using cases in [case](./case) folder. You only need to specify ID. Should call `build.sh` beforehand.
 
   Example:
 
   ```shell
   ./riscv.sh 1 # Use 001-main.c.
+  ```
+
+- `compiler.sh`
+
+  Use your compiler in RISC-V mode and execute the output file. Should call `build.sh` beforehand. Used only in Docker command line.
+
+  Example:
+
+  ```shell
+  ./compiler.sh case/001-main.sy
   ```
 
 ## License

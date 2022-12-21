@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include <cassert>
 #include <memory>
 #include <optional>
 #include <string>
@@ -118,55 +119,114 @@ namespace compiler::ast
 
     /**
      * @brief AST of a complete program.
+     * CompUnit ::= [CompUnit] (Decl | FuncDef);
+     * Fixed:
+     * CompUnit ::= DeclOrFuncList;
      */
     class ast_program_t : public ast_base_t
     {
     public:
-        ast_t function;
+        std::vector<ast_t> declaration_or_function_items;
 
     public:
-        std::string to_koopa() const override { return function->to_koopa(); }
+        std::string to_koopa() const override
+        {
+            std::string ret;
+
+            // 将库函数加入到符号表。
+            {
+                std::array lib_functions{
+                    symbol_function_t{"getint", true},
+                    symbol_function_t{"getch", true},
+                    symbol_function_t{"getarray", true},
+                    symbol_function_t{"putint", false},
+                    symbol_function_t{"putch", false},
+                    symbol_function_t{"putarray", false},
+                    symbol_function_t{"starttime", false},
+                    symbol_function_t{"stoptime", false},
+                };
+                for (size_t i = 0; i < lib_functions.size(); i++)
+                {
+                    const auto& symbol = lib_functions[i];
+                    st.insert(symbol.internal_name, symbol);
+                }
+            }
+
+            // 输出库函数的声明。
+            ret += R"(decl @getint(): i32
+decl @getch(): i32
+decl @getarray(*i32): i32
+decl @putint(i32)
+decl @putch(i32)
+decl @putarray(i32, *i32)
+decl @starttime()
+decl @stoptime()
+
+)";
+
+            for (const auto& item : declaration_or_function_items)
+                ret += item->to_koopa();
+            return ret;
+        }
+    };
+
+    /**
+     * @brief AST of a declaration or function list.
+     * DeclOrFuncList ::= (Decl | FuncDef);
+     * DeclOrFuncList ::= (Decl | FuncDef) DeclOrFuncList;
+     *
+     * @note This is a temporary type only used in syntax analysis.
+     */
+    class ast_declaration_or_function_list_t : public ast_base_t
+    {
+    public:
+        ast_t item;
+        std::shared_ptr<ast_declaration_or_function_list_t>
+            declaration_or_function_list;
     };
 
     /**
      * @brief AST of a function.
+     * FuncDef ::= FuncType IDENT "(" [FuncFParams] ")" Block;
+     * Fixed:
+     * FuncDef ::= FuncType IDENT "(" ")" Block;
+     * FuncDef ::= FuncType IDENT "(" FuncFParamList ")" Block;
      */
     class ast_function_t : public ast_base_t
     {
     public:
         ast_t function_type;
         std::string function_name;
+        std::vector<ast_t> parameters;
         ast_t block;
 
     public:
-        std::string to_koopa() const override
-        {
-            std::string ret;
-            ret += fmt::format("fun @{}() : {} {{\n", function_name,
-                               function_type->to_koopa());
-            ret += fmt::format("%{}_entry:\n", function_name);
-            ret += block->to_koopa();
-            ret += "    ret 0\n";
-            ret += "}\n";
-            return ret;
-        }
+        std::string to_koopa() const override;
     };
 
     /**
-     * @brief AST of a function type.
+     * @brief AST of a parameter list.
+     * FuncFParamList ::= FuncFParam;
+     * FuncFParamList ::= FuncFParam "," FuncFParamList;
+     *
+     * @note This is a temporary type only used in syntax analysis.
      */
-    class ast_function_type_t : public ast_base_t
+    class ast_parameter_list_t : public ast_base_t
     {
     public:
-        std::string type_name;
+        ast_t parameter;
+        std::shared_ptr<ast_parameter_list_t> parameter_list;
+    };
 
+    /**
+     * @brief AST of a parameter.
+     * FuncFParam ::= BType IDENT;
+     */
+    class ast_parameter_t : public ast_base_t
+    {
     public:
-        std::string to_koopa() const override
-        {
-            if (type_name == "int")
-                return "i32";
-            return type_name;
-        }
+        ast_t type;
+        std::string raw_name;
     };
 
     /**
@@ -614,6 +674,77 @@ namespace compiler::ast
     };
 
     /**
+     * @brief AST of a unary expression.
+     * UnaryExp ::= IDENT "(" [FuncRParams] ")";
+     * Fixed:
+     * UnaryExp ::= IDENT "(" ")";
+     * UnaryExp ::= IDENT "(" FuncRParamList ")";
+     */
+    class ast_unary_expression_3_t : public ast_base_t
+    {
+    public:
+        std::string function_raw_name;
+        std::vector<ast_t> arguments; // An argument is an expression.
+
+    public:
+        std::string to_koopa() const override
+        {
+            std::string ret;
+
+            auto symbol =
+                std::get<symbol_function_t>(*st.at(function_raw_name));
+
+            // Generate argument string.
+            std::string argument_string;
+            {
+                for (size_t i = 0; i < arguments.size(); i++)
+                {
+                    std::string single_argument_string;
+                    const auto& argument = arguments[i];
+                    if (auto const_value = argument->get_inline_number())
+                        single_argument_string = std::to_string(*const_value);
+                    else
+                    {
+                        ret += argument->to_koopa();
+                        single_argument_string =
+                            fmt::format("%{}", argument->get_result_id());
+                    }
+
+                    if (!argument_string.empty())
+                        argument_string += ", ";
+                    argument_string += single_argument_string;
+                }
+            }
+
+            // Generate prefix string.
+            std::string prefix_string;
+            if (symbol.has_return_value)
+            {
+                assign_result_id();
+                prefix_string = fmt::format("%{} = ", get_result_id());
+            }
+
+            ret += fmt::format("    {}call @{}({})\n", prefix_string,
+                               symbol.internal_name, argument_string);
+            return ret;
+        }
+    };
+
+    /**
+     * @brief AST of a argument list.
+     * FuncRParamList ::= Exp;
+     * FuncRParamList ::= Exp "," FuncRParamList;
+     *
+     * @note This is a temporary type only used in syntax analysis.
+     */
+    class ast_argument_list_t : public ast_base_t
+    {
+    public:
+        ast_t argument;
+        std::shared_ptr<ast_argument_list_t> argument_list;
+    };
+
+    /**
      * @brief AST of an multiply expression.
      * MulExp ::= UnaryExp;
      */
@@ -1037,6 +1168,8 @@ namespace compiler::ast
             auto rvalue_1 = land_expression->get_inline_number();
             if (!rvalue_1)
                 return std::nullopt;
+            if (!(*rvalue_1))
+                return 0; // Short circuit.
             auto rvalue_2 = equation_expression->get_inline_number();
             if (!rvalue_2)
                 return std::nullopt;
@@ -1154,6 +1287,8 @@ namespace compiler::ast
             auto rvalue_1 = lor_expression->get_inline_number();
             if (!rvalue_1)
                 return std::nullopt;
+            if (*rvalue_1)
+                return 1; // Short circuit.
             auto rvalue_2 = land_expression->get_inline_number();
             if (!rvalue_2)
                 return std::nullopt;
@@ -1266,10 +1401,10 @@ namespace compiler::ast
     };
 
     /**
-     * @brief AST of a base type.
-     * BType ::= "int";
+     * @brief AST of a type.
+     * Type ::= "void" | "int";
      */
-    class ast_base_type_t : public ast_base_t
+    class ast_type_t : public ast_base_t
     {
     public:
         std::string type_name;
@@ -1279,6 +1414,8 @@ namespace compiler::ast
         {
             if (type_name == "int")
                 return "i32";
+            else if (type_name == "void")
+                return "";
             return type_name;
         }
     };
@@ -1292,7 +1429,7 @@ namespace compiler::ast
     class ast_const_declaration_t : public ast_base_t
     {
     public:
-        ast_t base_type;
+        ast_t type;
         std::vector<ast_t> const_definitions;
 
     public:
@@ -1325,7 +1462,7 @@ namespace compiler::ast
     class ast_const_definition_t : public ast_base_t
     {
     public:
-        std::shared_ptr<ast_base_type_t> base_type;
+        std::shared_ptr<ast_type_t> type;
         std::string raw_name;
         ast_t const_initial_value;
 
@@ -1389,7 +1526,7 @@ namespace compiler::ast
     class ast_variable_declaration_t : public ast_base_t
     {
     public:
-        ast_t base_type;
+        ast_t type;
         std::vector<ast_t> variable_definitions;
 
     public:
@@ -1424,21 +1561,35 @@ namespace compiler::ast
     class ast_variable_definition_t : public ast_base_t
     {
     public:
-        std::shared_ptr<ast_base_type_t> base_type;
+        std::shared_ptr<ast_type_t> type;
         std::string raw_name;
 
     public:
         std::string to_koopa() const override
         {
+            std::string ret;
+
             {
                 symbol_variable_t symbol;
                 st.insert(raw_name, std::move(symbol));
             }
 
             auto symbol = std::get<symbol_variable_t>(*st.at(raw_name));
-            auto type = base_type->to_koopa();
-            return fmt::format("    @{} = alloc {}\n", symbol.internal_name,
-                               type);
+            auto type_string = type->to_koopa();
+
+            if (st.is_global(raw_name))
+            {
+                ret += fmt::format(
+                    "global @{} = alloc {}, ", // This line does not end.
+                    symbol.internal_name, type_string);
+            }
+            else
+            {
+                ret += fmt::format("    @{} = alloc {}\n", symbol.internal_name,
+                                   type_string);
+            }
+
+            return ret;
         }
     };
 
@@ -1448,6 +1599,14 @@ namespace compiler::ast
      */
     class ast_variable_definition_1_t : public ast_variable_definition_t
     {
+    public:
+        std::string to_koopa() const override
+        {
+            auto ret = ast_variable_definition_t::to_koopa();
+            if (st.is_global(raw_name))
+                ret += "zeroinit\n\n";
+            return ret;
+        }
     };
 
     /**
@@ -1465,8 +1624,9 @@ namespace compiler::ast
             auto ret = ast_variable_definition_t::to_koopa();
 
             std::string initial_value_holder;
+            auto const_initial_value = initial_value->get_inline_number();
+            // 判断初始化表达式是否是常量值。
             {
-                auto const_initial_value = initial_value->get_inline_number();
                 if (const_initial_value)
                     initial_value_holder = std::to_string(*const_initial_value);
                 else
@@ -1477,9 +1637,18 @@ namespace compiler::ast
                 }
             }
 
-            auto symbol = std::get<symbol_variable_t>(*st.at(raw_name));
-            ret += fmt::format("    store {}, @{}\n", initial_value_holder,
-                               symbol.internal_name);
+            if (st.is_global(raw_name))
+            {
+                // 只允许使用常量表达式初始化全局变量。
+                assert(const_initial_value);
+                ret += fmt::format("{}\n\n", *const_initial_value);
+            }
+            else
+            {
+                auto symbol = std::get<symbol_variable_t>(*st.at(raw_name));
+                ret += fmt::format("    store {}, @{}\n", initial_value_holder,
+                                   symbol.internal_name);
+            }
 
             return ret;
         }
@@ -1539,6 +1708,65 @@ namespace compiler::ast
                                symbol.internal_name);
         }
     };
+
+    inline std::string ast_function_t::to_koopa() const
+    {
+        std::string ret;
+
+        // Insert the function into symbol table.
+        {
+            symbol_function_t symbol;
+            symbol.has_return_value = !function_type->to_koopa().empty();
+            st.insert(function_name, symbol);
+        }
+
+        st.push();
+
+        std::string parameter_string;
+        for (size_t i = 0; i < parameters.size(); i++)
+        {
+            auto param =
+                std::dynamic_pointer_cast<ast_parameter_t>(parameters[i]);
+            if (!parameter_string.empty())
+                parameter_string += ", ";
+            parameter_string += fmt::format("@{}: {}", param->raw_name,
+                                            param->type->to_koopa());
+        }
+
+        std::string return_type_string;
+        {
+            return_type_string = function_type->to_koopa();
+            if (!return_type_string.empty())
+                return_type_string = fmt::format(": {}", return_type_string);
+        }
+        ret += fmt::format("fun @{}({}){} {{\n", function_name,
+                           parameter_string, return_type_string);
+
+        ret += fmt::format("%{}_entry:\n", function_name);
+        for (size_t i = 0; i < parameters.size(); i++)
+        {
+            auto param =
+                std::dynamic_pointer_cast<ast_parameter_t>(parameters[i]);
+            st.insert(param->raw_name, symbol_variable_t{});
+            auto symbol = std::get<symbol_variable_t>(*st.at(param->raw_name));
+
+            ret += fmt::format("    @{} = alloc {}\n", symbol.internal_name,
+                               param->type->to_koopa());
+            ret += fmt::format("    store @{}, @{}\n", param->raw_name,
+                               symbol.internal_name);
+        }
+
+        ret += block->to_koopa();
+        if (function_type->to_koopa().empty())
+            ret += "    ret\n";
+        else
+            ret += "    ret 0\n";
+        ret += "}\n\n";
+
+        st.pop();
+
+        return ret;
+    }
 
     inline std::string ast_statement_2_t::to_koopa() const
     {

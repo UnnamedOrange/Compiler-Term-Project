@@ -32,7 +32,13 @@ namespace compiler
         // TODO: Design member variables.
     };
 
-    using symbol_t = std::variant<symbol_const_t, symbol_variable_t>;
+    struct symbol_function_t : public symbol_base_t
+    {
+        bool has_return_value;
+    };
+
+    using symbol_t =
+        std::variant<symbol_const_t, symbol_variable_t, symbol_function_t>;
 
     /**
      * @brief Symbol table for frontend.
@@ -72,5 +78,10 @@ namespace compiler
          * @brief Query a symbol according to its raw name.
          */
         std::optional<symbol_t> at(const std::string& raw_name) const;
+        /**
+         * @brief Query whether a symbol is global.
+         * If the symbol does not exist, returns false.
+         */
+        bool is_global(const std::string& raw_name) const;
     };
 } // namespace compiler

@@ -57,14 +57,15 @@ Hexadecimal   0[xX][0-9a-fA-F]+
 {LineComment}   { /* 忽略, 不做任何操作 */ }
 {BlockComment}  { /* 忽略, 不做任何操作 */ }
 
-"int"           { return INT; }
-"return"        { return RETURN; }
-"const"         { return CONST; }
-"if"            { return IF; }
-"else"          { return ELSE; }
-"while"         { return WHILE; }
-"break"         { return BREAK; }
-"continue"      { return CONTINUE; }
+"int"           { yylval = std::string(yytext); return INT; }
+"void"          { yylval = std::string(yytext); return VOID; }
+"return"        { yylval = std::string(yytext); return RETURN; }
+"const"         { yylval = std::string(yytext); return CONST; }
+"if"            { yylval = std::string(yytext); return IF; }
+"else"          { yylval = std::string(yytext); return ELSE; }
+"while"         { yylval = std::string(yytext); return WHILE; }
+"break"         { yylval = std::string(yytext); return BREAK; }
+"continue"      { yylval = std::string(yytext); return CONTINUE; }
 
 "<"             { yylval = std::string(yytext); return LT; }
 ">"             { yylval = std::string(yytext); return GT; }

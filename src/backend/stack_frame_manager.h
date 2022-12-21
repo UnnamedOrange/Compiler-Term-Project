@@ -32,6 +32,10 @@ namespace compiler
 #endif
 
     private:
+        // 低地址额外的空间。用于保存函数参数。
+        size_t additional_lower;
+        // 高地址额外的空间。用于保存返回地址。
+        size_t additional_upper;
         // 保存的偏移量。
         std::vector<size_t> offsets;
         // 变量名到偏移量下标的映射。
@@ -52,12 +56,40 @@ namespace compiler
          */
         void alloc(variable_t variable_id, size_t size);
         /**
+         * @brief Allocate additional stack space of lower address.
+         * Call this for arguments.
+         */
+        void alloc_lower(size_t size);
+        /**
+         * @brief Allocate additional stack space of upper address.
+         * Call this for return address.
+         */
+        void alloc_upper(size_t size);
+        /**
+         * @brief Check whether a variable ID exists in the manager.
+         */
+        size_t count(variable_t variable_id) const;
+        /**
          * @brief Get the offset of a variable.
          */
         int offset(variable_t variable_id) const;
         /**
+         * @brief Get the offset of the additional space of lower address.
+         * Always returns 0.
+         */
+        int offset_lower() const;
+        /**
+         * @brief Get the offset of the additional space of upper address.
+         */
+        int offset_upper() const;
+        /**
          * @brief Get size of the current stack frame.
          */
         size_t size() const;
+        /**
+         * @brief Get size of the current stack frame (rounded to multiples of
+         * 16).
+         */
+        size_t rounded_size() const;
     };
 } // namespace compiler
