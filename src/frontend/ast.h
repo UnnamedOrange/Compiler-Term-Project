@@ -18,6 +18,7 @@
 #include <fmt/core.h>
 
 #include "symbol_table.h"
+#include "type_system.h"
 
 namespace compiler::ast
 {
@@ -1407,17 +1408,10 @@ decl @stoptime()
     class ast_type_t : public ast_base_t
     {
     public:
-        std::string type_name;
+        std::shared_ptr<type_base_t> type;
 
     public:
-        std::string to_koopa() const override
-        {
-            if (type_name == "int")
-                return "i32";
-            else if (type_name == "void")
-                return "";
-            return type_name;
-        }
+        std::string to_koopa() const override { return type->to_koopa(); }
     };
 
     /**

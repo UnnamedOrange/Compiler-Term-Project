@@ -20,6 +20,8 @@
 %code requires {
 // 定义类型。
 #include <frontend/ast.h>
+#include <frontend/type_system.h>
+using namespace compiler;
 using namespace compiler::ast;
 
 #include <variant>
@@ -179,12 +181,16 @@ nt_function : nt_type IDENTIFIER '(' ')' nt_block {
 }
 nt_type : VOID {
     auto ast_function_type = std::make_shared<ast_type_t>();
-    ast_function_type->type_name = std::get<string>($1);
+    auto type_object = std::make_shared<type_primary_t>();
+    type_object->type_name = std::get<string>($1);
+    ast_function_type->type = type_object;
     $$ = ast_function_type;
 }
 | INT {
     auto ast_function_type = std::make_shared<ast_type_t>();
-    ast_function_type->type_name = std::get<string>($1);
+    auto type_object = std::make_shared<type_primary_t>();
+    type_object->type_name = std::get<string>($1);
+    ast_function_type->type = type_object;
     $$ = ast_function_type;
 }
 nt_parameter_list : nt_parameter {
