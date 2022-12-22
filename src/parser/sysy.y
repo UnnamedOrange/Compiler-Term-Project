@@ -98,10 +98,12 @@ void yyerror(ast_t& ast, const char* s);
 %type nt_statement
 %type nt_declaration nt_const_declaration nt_variable_declaration
 %type nt_lvalue
+%type nt_index nt_index_list
 %type nt_const_definition nt_const_definition_list
-%type nt_const_initial_value nt_const_expression
+%type nt_array_dimension nt_array_dimension_list
+%type nt_const_initial_value nt_const_initial_value_list nt_const_expression
 %type nt_variable_definition nt_variable_definition_list
-%type nt_initial_value
+%type nt_initial_value nt_initial_value_list
 %type nt_expression nt_primary_expression
 %type nt_unary_expression nt_unary_operator
 %type nt_argument_list
@@ -473,17 +475,27 @@ nt_declaration : nt_const_declaration {
     $$ = ast_declaration;
 }
 nt_const_declaration : CONST nt_type nt_const_definition_list ';' {
-    auto ast_const_definition = std::make_shared<ast_const_declaration_t>();
-    ast_const_definition->type = std::get<ast_t>($2);
+    auto ast_const_declaration = std::make_shared<ast_const_declaration_t>();
+    ast_const_declaration->primary_type = std::get<ast_t>($2); // Backup.
+    auto primary_type = std::dynamic_pointer_cast<ast_type_t>(std::get<ast_t>($2))->type;
     auto current_list = std::dynamic_pointer_cast<ast_const_definition_list_t>(std::get<ast_t>($3));
     while (current_list)
     {
         auto def = std::dynamic_pointer_cast<ast_const_definition_t>(std::move(current_list->const_definition));
-        def->type = std::dynamic_pointer_cast<ast_type_t>(ast_const_definition->type);
-        ast_const_definition->const_definitions.push_back(std::move(def));
+        if (!(def->type->type))
+            def->type->type = primary_type;
+        else
+        {
+            // 找到最内层的 type，替换为 primary_type。
+            auto type = def->type->type;
+            while (type->get_base_type())
+                type = type->get_base_type();
+            std::dynamic_pointer_cast<type_array_t>(type)->base_type = primary_type;
+        }
+        ast_const_declaration->const_definitions.push_back(std::move(def));
         current_list = current_list->const_definition_list;
     }
-    $$ = ast_const_definition;
+    $$ = ast_const_declaration;
 }
 nt_const_definition_list : nt_const_definition {
     auto ast_const_definition_list = std::make_shared<ast_const_definition_list_t>();
@@ -500,11 +512,87 @@ nt_const_definition : IDENTIFIER '=' nt_const_initial_value {
     auto ast_const_definition = std::make_shared<ast_const_definition_t>();
     ast_const_definition->raw_name = std::get<string>($1);
     ast_const_definition->const_initial_value = std::get<ast_t>($3);
+    // 基本类型在外面的产生式替换。
+    ast_const_definition->type = std::make_shared<ast_type_t>();
     $$ = ast_const_definition;
 }
+| IDENTIFIER nt_array_dimension_list '=' nt_const_initial_value {
+    auto ast_const_definition = std::make_shared<ast_const_definition_t>();
+    ast_const_definition->raw_name = std::get<string>($1);
+    ast_const_definition->const_initial_value = std::get<ast_t>($4);
+
+    // 提取数组大小。
+    std::vector<size_t> sizes;
+    {
+        auto current_list = std::dynamic_pointer_cast<ast_array_dimension_list_t>(std::get<ast_t>($2));
+        while (current_list)
+        {
+            auto dimension = std::dynamic_pointer_cast<ast_const_expression_t>(std::move(current_list->array_dimension));
+            sizes.push_back(*(dimension->get_inline_number()));
+            current_list = current_list->array_dimension_list;
+        }
+    }
+
+    // 最内层的基本类型在外面的产生式替换。
+    {
+        std::shared_ptr<type_array_t> type;
+        auto ast_type = std::make_shared<ast_type_t>();
+        for (size_t i = sizes.size() - 1; ~i; i--)
+        {
+            auto outer_type = std::make_shared<type_array_t>();
+            outer_type->base_type = type;
+            outer_type->array_size = sizes[i];
+            type = outer_type;
+        }
+
+        ast_type->type = type;
+        ast_const_definition->type = ast_type;
+    }
+
+    $$ = ast_const_definition;
+}
+nt_array_dimension_list : nt_array_dimension {
+    auto ast_array_dimension_list = std::make_shared<ast_array_dimension_list_t>();
+    ast_array_dimension_list->array_dimension = std::get<ast_t>($1);
+    $$ = ast_array_dimension_list;
+}
+| nt_array_dimension nt_array_dimension_list {
+    auto ast_array_dimension_list = std::make_shared<ast_array_dimension_list_t>();
+    ast_array_dimension_list->array_dimension = std::get<ast_t>($1);
+    ast_array_dimension_list->array_dimension_list = std::dynamic_pointer_cast<ast_array_dimension_list_t>(std::get<ast_t>($2));
+    $$ = ast_array_dimension_list;
+}
+nt_array_dimension : '[' nt_const_expression ']' {
+    $$ = $2;
+}
+nt_const_initial_value_list : nt_const_initial_value {
+    auto ast_const_initial_value_list = std::make_shared<ast_const_initial_value_list_t>();
+    ast_const_initial_value_list->const_initial_value = std::get<ast_t>($1);
+    $$ = ast_const_initial_value_list;
+}
+| nt_const_initial_value ',' nt_const_initial_value_list {
+    auto ast_const_initial_value_list = std::make_shared<ast_const_initial_value_list_t>();
+    ast_const_initial_value_list->const_initial_value = std::get<ast_t>($1);
+    ast_const_initial_value_list->const_initial_value_list = std::dynamic_pointer_cast<ast_const_initial_value_list_t>(std::get<ast_t>($3));
+    $$ = ast_const_initial_value_list;
+}
 nt_const_initial_value : nt_const_expression {
-    auto ast_const_initial_value = std::make_shared<ast_const_initial_value_t>();
+    auto ast_const_initial_value = std::make_shared<ast_const_initial_value_1_t>();
     ast_const_initial_value->const_expression = std::get<ast_t>($1);
+    $$ = ast_const_initial_value;
+}
+| '{' '}' {
+    $$ = std::make_shared<ast_const_initial_value_2_t>();
+}
+| '{' nt_const_initial_value_list '}' {
+    auto ast_const_initial_value = std::make_shared<ast_const_initial_value_2_t>();
+    auto current_list = std::dynamic_pointer_cast<ast_const_initial_value_list_t>(std::get<ast_t>($2));
+    while (current_list)
+    {
+        auto const_initial_value = std::move(current_list->const_initial_value);
+        ast_const_initial_value->const_initial_values.push_back(std::move(const_initial_value));
+        current_list = current_list->const_initial_value_list;
+    }
     $$ = ast_const_initial_value;
 }
 nt_const_expression : nt_expression {
@@ -513,17 +601,27 @@ nt_const_expression : nt_expression {
     $$ = ast_const_expression;
 }
 nt_variable_declaration : nt_type nt_variable_definition_list ';' {
-    auto ast_variable_definition = std::make_shared<ast_variable_declaration_t>();
-    ast_variable_definition->type = std::get<ast_t>($1);
+    auto ast_variable_declaration = std::make_shared<ast_variable_declaration_t>();
+    ast_variable_declaration->primary_type = std::get<ast_t>($1); // Backup.
+    auto primary_type = std::dynamic_pointer_cast<ast_type_t>(std::get<ast_t>($1))->type;
     auto current_list = std::dynamic_pointer_cast<ast_variable_definition_list_t>(std::get<ast_t>($2));
     while (current_list)
     {
         auto def = std::dynamic_pointer_cast<ast_variable_definition_t>(std::move(current_list->variable_definition));
-        def->type = std::dynamic_pointer_cast<ast_type_t>(ast_variable_definition->type);
-        ast_variable_definition->variable_definitions.push_back(std::move(def));
+        if (!(def->type->type))
+            def->type->type = primary_type;
+        else
+        {
+            // 找到最内层的 type，替换为 primary_type。
+            auto type = def->type->type;
+            while (type->get_base_type())
+                type = type->get_base_type();
+            std::dynamic_pointer_cast<type_array_t>(type)->base_type = primary_type;
+        }
+        ast_variable_declaration->variable_definitions.push_back(std::move(def));
         current_list = current_list->variable_definition_list;
     }
-    $$ = ast_variable_definition;
+    $$ = ast_variable_declaration;
 }
 nt_variable_definition_list : nt_variable_definition {
     auto ast_variable_definition_list = std::make_shared<ast_variable_definition_list_t>();
@@ -539,23 +637,147 @@ nt_variable_definition_list : nt_variable_definition {
 nt_variable_definition : IDENTIFIER {
     auto ast_variable_definition = std::make_shared<ast_variable_definition_1_t>();
     ast_variable_definition->raw_name = std::get<string>($1);
+    // 基本类型在外面的产生式替换。
+    ast_variable_definition->type = std::make_shared<ast_type_t>();
+    $$ = ast_variable_definition;
+}
+| IDENTIFIER nt_array_dimension_list {
+    auto ast_variable_definition = std::make_shared<ast_variable_definition_1_t>();
+    ast_variable_definition->raw_name = std::get<string>($1);
+
+    // 提取数组大小。
+    std::vector<size_t> sizes;
+    {
+        auto current_list = std::dynamic_pointer_cast<ast_array_dimension_list_t>(std::get<ast_t>($2));
+        while (current_list)
+        {
+            auto dimension = std::dynamic_pointer_cast<ast_const_expression_t>(std::move(current_list->array_dimension));
+            sizes.push_back(*(dimension->get_inline_number()));
+            current_list = current_list->array_dimension_list;
+        }
+    }
+
+    // 最内层的基本类型在外面的产生式替换。
+    {
+        std::shared_ptr<type_array_t> type;
+        auto ast_type = std::make_shared<ast_type_t>();
+        for (size_t i = sizes.size() - 1; ~i; i--)
+        {
+            auto outer_type = std::make_shared<type_array_t>();
+            outer_type->base_type = type;
+            outer_type->array_size = sizes[i];
+            type = outer_type;
+        }
+
+        ast_type->type = type;
+        ast_variable_definition->type = ast_type;
+    }
+
     $$ = ast_variable_definition;
 }
 | IDENTIFIER '=' nt_initial_value {
     auto ast_variable_definition = std::make_shared<ast_variable_definition_2_t>();
     ast_variable_definition->raw_name = std::get<string>($1);
     ast_variable_definition->initial_value = std::get<ast_t>($3);
+    // 基本类型在外面的产生式替换。
+    ast_variable_definition->type = std::make_shared<ast_type_t>();
     $$ = ast_variable_definition;
 }
+| IDENTIFIER nt_array_dimension_list '=' nt_initial_value {
+    auto ast_variable_definition = std::make_shared<ast_variable_definition_2_t>();
+    ast_variable_definition->raw_name = std::get<string>($1);
+    ast_variable_definition->initial_value = std::get<ast_t>($4);
+
+    // 提取数组大小。
+    std::vector<size_t> sizes;
+    {
+        auto current_list = std::dynamic_pointer_cast<ast_array_dimension_list_t>(std::get<ast_t>($2));
+        while (current_list)
+        {
+            auto dimension = std::dynamic_pointer_cast<ast_const_expression_t>(std::move(current_list->array_dimension));
+            sizes.push_back(*(dimension->get_inline_number()));
+            current_list = current_list->array_dimension_list;
+        }
+    }
+
+    // 最内层的基本类型在外面的产生式替换。
+    {
+        std::shared_ptr<type_array_t> type;
+        auto ast_type = std::make_shared<ast_type_t>();
+        for (size_t i = sizes.size() - 1; ~i; i--)
+        {
+            auto outer_type = std::make_shared<type_array_t>();
+            outer_type->base_type = type;
+            outer_type->array_size = sizes[i];
+            type = outer_type;
+        }
+
+        ast_type->type = type;
+        ast_variable_definition->type = ast_type;
+    }
+
+    $$ = ast_variable_definition;
+}
+nt_initial_value_list : nt_initial_value {
+    auto ast_initial_value_list = std::make_shared<ast_initial_value_list_t>();
+    ast_initial_value_list->initial_value = std::get<ast_t>($1);
+    $$ = ast_initial_value_list;
+}
+| nt_initial_value ',' nt_initial_value_list {
+    auto ast_initial_value_list = std::make_shared<ast_initial_value_list_t>();
+    ast_initial_value_list->initial_value = std::get<ast_t>($1);
+    ast_initial_value_list->initial_value_list = std::dynamic_pointer_cast<ast_initial_value_list_t>(std::get<ast_t>($3));
+    $$ = ast_initial_value_list;
+}
 nt_initial_value : nt_expression {
-    auto ast_initial_value = std::make_shared<ast_initial_value_t>();
+    auto ast_initial_value = std::make_shared<ast_initial_value_1_t>();
     ast_initial_value->expression = std::get<ast_t>($1);
+    $$ = ast_initial_value;
+}
+| '{' '}' {
+    $$ = std::make_shared<ast_initial_value_2_t>();
+}
+| '{' nt_initial_value_list '}' {
+    auto ast_initial_value = std::make_shared<ast_initial_value_2_t>();
+    auto current_list = std::dynamic_pointer_cast<ast_initial_value_list_t>(std::get<ast_t>($2));
+    while (current_list)
+    {
+        auto initial_value = std::move(current_list->initial_value);
+        ast_initial_value->initial_values.push_back(std::move(initial_value));
+        current_list = current_list->initial_value_list;
+    }
     $$ = ast_initial_value;
 }
 nt_lvalue : IDENTIFIER {
     auto ast_lvalue = std::make_shared<ast_lvalue_t>();
     ast_lvalue->raw_name = std::get<string>($1);
     $$ = ast_lvalue;
+}
+| IDENTIFIER nt_index_list {
+    auto ast_lvalue = std::make_shared<ast_lvalue_t>();
+    ast_lvalue->raw_name = std::get<string>($1);
+    auto current_list = std::dynamic_pointer_cast<ast_index_list_t>(std::get<ast_t>($2));
+    while (current_list)
+    {
+        auto index = std::move(current_list->index);
+        ast_lvalue->indices.push_back(std::move(index));
+        current_list = current_list->index_list;
+    }
+    $$ = ast_lvalue;
+}
+nt_index_list : nt_index {
+    auto ast_index_list = std::make_shared<ast_index_list_t>();
+    ast_index_list->index = std::get<ast_t>($1);
+    $$ = ast_index_list;
+}
+| nt_index nt_index_list {
+    auto ast_index_list = std::make_shared<ast_index_list_t>();
+    ast_index_list->index = std::get<ast_t>($1);
+    ast_index_list->index_list = std::dynamic_pointer_cast<ast_index_list_t>(std::get<ast_t>($2));
+    $$ = ast_index_list;
+}
+nt_index : '[' nt_expression ']' {
+    $$ = $2;
 }
 %%
 

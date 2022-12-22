@@ -1423,7 +1423,7 @@ decl @stoptime()
     class ast_const_declaration_t : public ast_base_t
     {
     public:
-        ast_t type;
+        ast_t primary_type;
         std::vector<ast_t> const_definitions;
 
     public:
@@ -1451,7 +1451,10 @@ decl @stoptime()
 
     /**
      * @brief AST of a const definition.
+     * ConstDef ::= IDENT {"[" ConstExp "]"} "=" ConstInitVal;
+     * Fixed:
      * ConstDef ::= IDENT "=" ConstInitVal;
+     * ConstDef ::= IDENT ArrDimList "=" ConstInitVal;
      */
     class ast_const_definition_t : public ast_base_t
     {
@@ -1466,15 +1469,45 @@ decl @stoptime()
             symbol_const_t symbol;
             symbol.value = *const_initial_value->get_inline_number();
             st.insert(raw_name, std::move(symbol));
+            // TODO: Implement.
             return "";
         }
+    };
+
+    /**
+     * @brief AST of an array dimension list.
+     * ArrDimList ::= ArrDim;
+     * ArrDimList ::= ArrDim ArrDimList;
+     *
+     * @note This is a temporary type only used in syntax analysis.
+     */
+    class ast_array_dimension_list_t : public ast_base_t
+    {
+    public:
+        ast_t array_dimension; // An array dimension is a const expression.
+        std::shared_ptr<ast_array_dimension_list_t> array_dimension_list;
+    };
+
+    /**
+     * @brief AST of a const initial value list.
+     * ConstInitValList ::= ConstInitVal;
+     * ConstInitValList ::= ConstInitVal "," ConstInitValList;
+     *
+     * @note This is a temporary type only used in syntax analysis.
+     */
+    class ast_const_initial_value_list_t : public ast_base_t
+    {
+    public:
+        ast_t const_initial_value;
+        std::shared_ptr<ast_const_initial_value_list_t>
+            const_initial_value_list;
     };
 
     /**
      * @brief AST of a const initial value.
      * ConstInitVal ::= ConstExp;
      */
-    class ast_const_initial_value_t : public ast_base_t
+    class ast_const_initial_value_1_t : public ast_base_t
     {
     public:
         ast_t const_expression;
@@ -1490,6 +1523,19 @@ decl @stoptime()
         {
             return const_expression->to_koopa();
         }
+    };
+
+    /**
+     * @brief AST of a const initial value.
+     * ConstInitVal ::= "{" [ConstInitVal {"," ConstInitVal}] "}";
+     * Fixed:
+     * ConstInitVal ::= "{" "}";
+     * ConstInitVal ::= "{" ConstInitValList "}";
+     */
+    class ast_const_initial_value_2_t : public ast_base_t
+    {
+    public:
+        std::vector<std::shared_ptr<ast_base_t>> const_initial_values;
     };
 
     /**
@@ -1520,7 +1566,7 @@ decl @stoptime()
     class ast_variable_declaration_t : public ast_base_t
     {
     public:
-        ast_t type;
+        ast_t primary_type;
         std::vector<ast_t> variable_definitions;
 
     public:
@@ -1589,13 +1635,17 @@ decl @stoptime()
 
     /**
      * @brief AST of a variable definition.
+     * VarDef ::= IDENT {"[" ConstExp "]"};
+     * Fixed:
      * VarDef ::= IDENT;
+     * VarDef ::= IDENT ArrDimList;
      */
     class ast_variable_definition_1_t : public ast_variable_definition_t
     {
     public:
         std::string to_koopa() const override
         {
+            // TODO: Implement.
             auto ret = ast_variable_definition_t::to_koopa();
             if (st.is_global(raw_name))
                 ret += "zeroinit\n\n";
@@ -1605,7 +1655,10 @@ decl @stoptime()
 
     /**
      * @brief AST of a variable definition.
+     * VarDef ::= IDENT {"[" ConstExp "]"} "=" InitVal;
+     * Fixed:
      * VarDef ::= IDENT "=" InitVal;
+     * VarDef ::= IDENT ArrDimList "=" InitVal;
      */
     class ast_variable_definition_2_t : public ast_variable_definition_t
     {
@@ -1615,6 +1668,7 @@ decl @stoptime()
     public:
         std::string to_koopa() const override
         {
+            // TODO: Implement.
             auto ret = ast_variable_definition_t::to_koopa();
 
             std::string initial_value_holder;
@@ -1649,10 +1703,24 @@ decl @stoptime()
     };
 
     /**
+     * @brief AST of an initial value list.
+     * InitValList ::= InitVal;
+     * InitValList ::= InitVal "," InitValList;
+     *
+     * @note This is a temporary type only used in syntax analysis.
+     */
+    class ast_initial_value_list_t : public ast_base_t
+    {
+    public:
+        ast_t initial_value;
+        std::shared_ptr<ast_initial_value_list_t> initial_value_list;
+    };
+
+    /**
      * @brief AST of an initial value.
      * InitVal ::= Exp;
      */
-    class ast_initial_value_t : public ast_base_t
+    class ast_initial_value_1_t : public ast_base_t
     {
     public:
         ast_t expression;
@@ -1673,13 +1741,30 @@ decl @stoptime()
     };
 
     /**
+     * @brief AST of a const initial value.
+     * InitVal ::= "{" [InitVal {"," InitVal}] "}";
+     * Fixed:
+     * InitVal ::= "{" "}";
+     * InitVal ::= "{" InitValList "}";
+     */
+    class ast_initial_value_2_t : public ast_base_t
+    {
+    public:
+        std::vector<std::shared_ptr<ast_base_t>> initial_values;
+    };
+
+    /**
      * @brief AST of an lvalue.
+     * LVal ::= IDENT {"[" Exp "]"};
+     * Fixed:
      * LVal ::= IDENT;
+     * LVal ::= IDENT IdxList;
      */
     class ast_lvalue_t : public ast_base_t
     {
     public:
         std::string raw_name;
+        std::vector<ast_t> indices; // An index is an expression.
 
     public:
         std::optional<int> get_inline_number() const override
@@ -1696,11 +1781,26 @@ decl @stoptime()
     public:
         std::string to_koopa() const override
         {
+            // TODO: Implement.
             assign_result_id(); // Always assign a new id to load.
             auto symbol = std::get<symbol_variable_t>(*st.at(raw_name));
             return fmt::format("    %{} = load @{}\n", get_result_id(),
                                symbol.internal_name);
         }
+    };
+
+    /**
+     * @brief AST of an index list.
+     * IdxList ::= Idx;
+     * IdxList ::= Idx IdxList;
+     *
+     * @note This is a temporary type only used in syntax analysis.
+     */
+    class ast_index_list_t : public ast_base_t
+    {
+    public:
+        ast_t index;
+        std::shared_ptr<ast_index_list_t> index_list;
     };
 
     inline std::string ast_function_t::to_koopa() const
