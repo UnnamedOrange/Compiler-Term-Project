@@ -136,14 +136,14 @@ namespace compiler::ast
             // 将库函数加入到符号表。
             {
                 std::array lib_functions{
-                    symbol_function_t{"getint", true},
-                    symbol_function_t{"getch", true},
-                    symbol_function_t{"getarray", true},
-                    symbol_function_t{"putint", false},
-                    symbol_function_t{"putch", false},
-                    symbol_function_t{"putarray", false},
-                    symbol_function_t{"starttime", false},
-                    symbol_function_t{"stoptime", false},
+                    symbol_function_t{{"getint"}, true},
+                    symbol_function_t{{"getch"}, true},
+                    symbol_function_t{{"getarray"}, true},
+                    symbol_function_t{{"putint"}, false},
+                    symbol_function_t{{"putch"}, false},
+                    symbol_function_t{{"putarray"}, false},
+                    symbol_function_t{{"starttime"}, false},
+                    symbol_function_t{{"stoptime"}, false},
                 };
                 for (size_t i = 0; i < lib_functions.size(); i++)
                 {
