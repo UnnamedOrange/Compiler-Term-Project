@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cassert>
 #include <memory>
 #include <optional>
@@ -1421,9 +1422,10 @@ namespace compiler::ast
     public:
         std::string to_koopa() const override
         {
+            std::string ret;
             for (const auto& def : const_definitions)
-                def->to_koopa();
-            return "";
+                ret += def->to_koopa();
+            return ret;
         }
     };
 
@@ -1456,15 +1458,7 @@ namespace compiler::ast
         ast_t const_initial_value;
 
     public:
-        std::string to_koopa() const override
-        {
-            symbol_const_t symbol;
-            symbol.type = int_type.shared_from_this();
-            symbol.value = *const_initial_value->get_inline_number();
-            st.insert(raw_name, std::move(symbol));
-            // TODO: Implement.
-            return "";
-        }
+        std::string to_koopa() const override;
     };
 
     /**
@@ -1530,6 +1524,112 @@ namespace compiler::ast
     public:
         std::vector<std::shared_ptr<ast_base_t>> const_initial_values;
     };
+
+    inline std::vector<int> generate_aggregate(
+        ast_t ast_initial, const std::vector<size_t>& size_hint)
+    {
+        std::vector<int> ret;
+
+        // 计算整个数组的大小。
+        size_t whole_size = 1;
+        for (auto size : size_hint)
+            whole_size *= size; // TODO: 推导最高维大小。
+
+        // 最外层总是一个列表。
+        auto ast_list =
+            std::dynamic_pointer_cast<ast_const_initial_value_2_t>(ast_initial);
+        const auto& values = ast_list->const_initial_values;
+
+        // 遍历列表。
+        for (size_t i = 0; i < values.size(); i++)
+        {
+            if (auto ast_number =
+                    std::dynamic_pointer_cast<ast_const_initial_value_1_t>(
+                        values[i]))
+            {
+                // 遇到整数时,
+                // 从当前待处理的维度中的最后一维开始填充数据。
+                ret.push_back(*ast_number->get_inline_number());
+            }
+            else if (std::dynamic_pointer_cast<ast_const_initial_value_2_t>(
+                         values[i]))
+            {
+                // 当前已经填充完毕的元素的个数必须是 len_n 的整数倍，
+                // 否则这个初始化列表没有对齐数组维度的边界，
+                // 你可以认为这种情况属于语义错误。
+                if (ret.size() % size_hint.back())
+                    throw std::domain_error("Invalid initializer list.");
+
+                // 检查当前对齐到了哪一个边界，然后将当前初始化列表视作
+                // 这个边界所对应的最长维度的数组的初始化列表，并递归处理。
+                size_t cut_index = 1;
+                size_t part_size = whole_size / size_hint[0];
+                while (cut_index < size_hint.size())
+                {
+                    if (ret.size() % part_size)
+                    {
+                        part_size /= size_hint[cut_index];
+                        cut_index++;
+                    }
+                    else
+                        break;
+                }
+                auto part = generate_aggregate(
+                    values[i], std::vector(size_hint.begin() + cut_index,
+                                           size_hint.end()));
+                ret.insert(ret.end(), part.begin(), part.end());
+            }
+            else
+                throw std::domain_error("Unexpected type.");
+        }
+
+        // 填充 0。
+        while (ret.size() < whole_size)
+            ret.push_back(0);
+
+        return ret;
+    }
+    inline std::string generate_aggregate_string(
+        const std::vector<int>& flatten_aggregate,
+        const std::vector<size_t>& size_hint)
+    {
+        std::string ret;
+
+        if (std::all_of(flatten_aggregate.begin(), flatten_aggregate.end(),
+                        [](int x) { return !x; }))
+        {
+            return "zeroinit";
+        }
+
+        if (size_hint.size() == 1)
+        {
+            for (int v : flatten_aggregate)
+            {
+                if (!ret.empty())
+                    ret += ", ";
+                ret += std::to_string(v);
+            }
+        }
+        else
+        {
+            size_t part_size = 1;
+            for (size_t i = 1; i < size_hint.size(); i++)
+                part_size *= size_hint[i];
+            for (size_t i = 0; i < size_hint[0]; i++)
+            {
+                if (!ret.empty())
+                    ret += ", ";
+                ret += "{";
+                ret += generate_aggregate_string(
+                    std::vector(flatten_aggregate.begin() + i * part_size,
+                                flatten_aggregate.begin() +
+                                    (i + 1) * part_size),
+                    std::vector(size_hint.begin() + 1, size_hint.end()));
+                ret += "}";
+            }
+        }
+        return ret;
+    }
 
     /**
      * @brief AST of a const expression.
@@ -1768,6 +1868,8 @@ namespace compiler::ast
                 return std::nullopt;
             if (!std::holds_alternative<symbol_const_t>(*symbol))
                 return std::nullopt;
+            if (std::get<symbol_const_t>(*symbol).type->get_base_type())
+                return std::nullopt; // 是数组。
 
             return std::get<symbol_const_t>(*symbol).value;
         }
@@ -1777,8 +1879,40 @@ namespace compiler::ast
         {
             std::string ret;
 
+            if (std::holds_alternative<symbol_variable_t>(*st.at(raw_name)))
             {
                 auto symbol = std::get<symbol_variable_t>(*st.at(raw_name));
+
+                int current_id = 0;
+                std::string current_source =
+                    fmt::format("@{}", symbol.internal_name);
+                for (size_t i = 0; i < indices.size(); i++)
+                {
+                    auto expression = indices[i];
+                    if (auto const_value = expression->get_inline_number())
+                    {
+                        current_id = new_result_id();
+                        ret += fmt::format("    %{} = getelemptr {}, {}\n",
+                                           current_id, current_source,
+                                           *const_value);
+                    }
+                    else
+                    {
+                        ret += expression->to_koopa();
+                        current_id = new_result_id();
+                        ret += fmt::format("    %{} = getelemptr {}, %{}\n",
+                                           current_id, current_source,
+                                           expression->get_result_id());
+                    }
+                    current_source = fmt::format("%{}", current_id);
+                }
+                assign_result_id();
+                ret += fmt::format("    %{} = load {}\n", get_result_id(),
+                                   current_source);
+            }
+            else if (std::holds_alternative<symbol_const_t>(*st.at(raw_name)))
+            {
+                auto symbol = std::get<symbol_const_t>(*st.at(raw_name));
 
                 int current_id = 0;
                 std::string current_source =
@@ -1825,6 +1959,66 @@ namespace compiler::ast
         ast_t index;
         std::shared_ptr<ast_index_list_t> index_list;
     };
+
+    inline std::string ast_const_definition_t::to_koopa() const
+    {
+        std::string ret;
+
+        symbol_const_t symbol;
+        symbol.type = type->type;
+
+        if (symbol.type->get_base_type()) // 是数组，计算出列表，生成代码。
+        {
+            // 生成数组大小。
+            std::vector<size_t> size_hint;
+            {
+                auto t = symbol.type;
+                while (t->get_base_type())
+                {
+                    size_hint.push_back(
+                        std::dynamic_pointer_cast<type_array_t>(t)->array_size);
+                    t = t->get_base_type();
+                }
+            }
+
+            // 递归处理初始化列表。
+            auto aggregate = generate_aggregate(const_initial_value, size_hint);
+
+            // 直接存入符号表，并在之后利用符号表判断全局性。
+            st.insert(raw_name, std::move(symbol));
+            symbol = std::get<symbol_const_t>(*st.at(raw_name));
+
+            // 生成代码。
+            std::string initial_value_string =
+                generate_aggregate_string(aggregate, size_hint);
+            std::string prefix;
+            {
+                if (st.is_global(raw_name))
+                    prefix = "global ";
+                else
+                    prefix = "    ";
+            }
+
+            ret += fmt::format("{}@{} = alloc {}", // The line does not end.
+                               prefix, symbol.internal_name,
+                               symbol.type->to_koopa());
+            if (st.is_global(raw_name))
+                ret += fmt::format(", {{{}}}\n", initial_value_string);
+            else
+            {
+                ret += "\n";
+                ret += fmt::format("    store {{{}}}, @{}\n",
+                                   initial_value_string, symbol.internal_name);
+            }
+        }
+        else // 是一个常数，直接计算出内联数，并存入符号。
+        {
+            symbol.value = *const_initial_value->get_inline_number();
+            st.insert(raw_name, std::move(symbol));
+        }
+
+        return ret;
+    }
 
     inline std::string ast_function_t::to_koopa() const
     {
