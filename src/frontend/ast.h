@@ -134,36 +134,27 @@ namespace compiler::ast
         {
             std::string ret;
 
-            // 将库函数加入到符号表。
+            // 将库函数加入到符号表并输出库函数的声明。
             {
+                using f = symbol_function_t;
                 std::array lib_functions{
-                    symbol_function_t{{"getint"}, true},
-                    symbol_function_t{{"getch"}, true},
-                    symbol_function_t{{"getarray"}, true},
-                    symbol_function_t{{"putint"}, false},
-                    symbol_function_t{{"putch"}, false},
-                    symbol_function_t{{"putarray"}, false},
-                    symbol_function_t{{"starttime"}, false},
-                    symbol_function_t{{"stoptime"}, false},
+                    f{"getint", int_type()},
+                    f{"getch", int_type()},
+                    f{"getarray", int_type(*int_type)},
+                    f{"putint", void_type(int_type)},
+                    f{"putch", void_type(int_type)},
+                    f{"putarray", void_type(int_type, *int_type)},
+                    f{"starttime", void_type()},
+                    f{"stoptime", void_type()},
                 };
                 for (size_t i = 0; i < lib_functions.size(); i++)
                 {
                     const auto& symbol = lib_functions[i];
                     st.insert(symbol.internal_name, symbol);
+                    ret += fmt::format("decl @{}{}\n", symbol.internal_name,
+                                       symbol.type->to_koopa());
                 }
             }
-
-            // 输出库函数的声明。
-            ret += R"(decl @getint(): i32
-decl @getch(): i32
-decl @getarray(*i32): i32
-decl @putint(i32)
-decl @putch(i32)
-decl @putarray(i32, *i32)
-decl @starttime()
-decl @stoptime()
-
-)";
 
             for (const auto& item : declaration_or_function_items)
                 ret += item->to_koopa();
@@ -196,7 +187,7 @@ decl @stoptime()
     class ast_function_t : public ast_base_t
     {
     public:
-        ast_t function_type;
+        ast_t return_type;
         std::string function_name;
         std::vector<ast_t> parameters;
         ast_t block;
@@ -694,6 +685,7 @@ decl @stoptime()
 
             auto symbol =
                 std::get<symbol_function_t>(*st.at(function_raw_name));
+            auto type = std::dynamic_pointer_cast<type_function_t>(symbol.type);
 
             // Generate argument string.
             std::string argument_string;
@@ -719,7 +711,7 @@ decl @stoptime()
 
             // Generate prefix string.
             std::string prefix_string;
-            if (symbol.has_return_value)
+            if (!(type->return_type->to_koopa().empty()))
             {
                 assign_result_id();
                 prefix_string = fmt::format("%{} = ", get_result_id());
@@ -1467,6 +1459,7 @@ decl @stoptime()
         std::string to_koopa() const override
         {
             symbol_const_t symbol;
+            symbol.type = int_type.shared_from_this();
             symbol.value = *const_initial_value->get_inline_number();
             st.insert(raw_name, std::move(symbol));
             // TODO: Implement.
@@ -1611,6 +1604,7 @@ decl @stoptime()
 
             {
                 symbol_variable_t symbol;
+                symbol.type = type->type;
                 st.insert(raw_name, std::move(symbol));
             }
 
@@ -1810,7 +1804,11 @@ decl @stoptime()
         // Insert the function into symbol table.
         {
             symbol_function_t symbol;
-            symbol.has_return_value = !function_type->to_koopa().empty();
+            auto type = std::make_shared<type_function_t>();
+            type->return_type =
+                std::dynamic_pointer_cast<ast_type_t>(return_type)->type;
+            symbol.type = type;
+            // TODO: Set the parameter types.
             st.insert(function_name, symbol);
         }
 
@@ -1829,7 +1827,7 @@ decl @stoptime()
 
         std::string return_type_string;
         {
-            return_type_string = function_type->to_koopa();
+            return_type_string = return_type->to_koopa();
             if (!return_type_string.empty())
                 return_type_string = fmt::format(": {}", return_type_string);
         }
@@ -1841,7 +1839,12 @@ decl @stoptime()
         {
             auto param =
                 std::dynamic_pointer_cast<ast_parameter_t>(parameters[i]);
-            st.insert(param->raw_name, symbol_variable_t{});
+            {
+                symbol_variable_t symbol;
+                symbol.type =
+                    std::dynamic_pointer_cast<ast_type_t>(param->type)->type;
+                st.insert(param->raw_name, symbol);
+            }
             auto symbol = std::get<symbol_variable_t>(*st.at(param->raw_name));
 
             ret += fmt::format("    @{} = alloc {}\n", symbol.internal_name,
@@ -1851,7 +1854,7 @@ decl @stoptime()
         }
 
         ret += block->to_koopa();
-        if (function_type->to_koopa().empty())
+        if (return_type->to_koopa().empty())
             ret += "    ret\n";
         else
             ret += "    ret 0\n";

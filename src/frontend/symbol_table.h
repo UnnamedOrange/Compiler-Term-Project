@@ -15,11 +15,14 @@
 #include <variant>
 #include <vector>
 
+#include "type_system.h"
+
 namespace compiler
 {
     struct symbol_base_t
     {
         std::string internal_name;
+        std::shared_ptr<type_base_t> type;
     };
 
     struct symbol_const_t : public symbol_base_t
@@ -34,7 +37,6 @@ namespace compiler
 
     struct symbol_function_t : public symbol_base_t
     {
-        bool has_return_value;
     };
 
     using symbol_t =

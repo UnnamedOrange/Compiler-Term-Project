@@ -163,14 +163,14 @@ nt_declaration_or_function : nt_declaration {
 }
 nt_function : nt_type IDENTIFIER '(' ')' nt_block {
     auto ast_function = std::make_shared<ast_function_t>();
-    ast_function->function_type = std::get<ast_t>($1);
+    ast_function->return_type = std::get<ast_t>($1);
     ast_function->function_name = std::get<string>($2);
     ast_function->block = std::get<ast_t>($5);
     $$ = ast_function;
 }
 | nt_type IDENTIFIER '(' nt_parameter_list ')' nt_block {
     auto ast_function = std::make_shared<ast_function_t>();
-    ast_function->function_type = std::get<ast_t>($1);
+    ast_function->return_type = std::get<ast_t>($1);
     ast_function->function_name = std::get<string>($2);
     auto current_list = std::dynamic_pointer_cast<ast_parameter_list_t>(std::get<ast_t>($4));
     while (current_list)
