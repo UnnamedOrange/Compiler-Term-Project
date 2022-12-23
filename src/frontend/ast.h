@@ -156,6 +156,7 @@ namespace compiler::ast
                                        symbol.type->to_koopa());
                 }
             }
+            ret += "\n";
 
             for (const auto& item : declaration_or_function_items)
                 ret += item->to_koopa();
