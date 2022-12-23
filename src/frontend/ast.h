@@ -1775,11 +1775,40 @@ namespace compiler::ast
     public:
         std::string to_koopa() const override
         {
-            // TODO: Implement.
-            assign_result_id(); // Always assign a new id to load.
-            auto symbol = std::get<symbol_variable_t>(*st.at(raw_name));
-            return fmt::format("    %{} = load @{}\n", get_result_id(),
-                               symbol.internal_name);
+            std::string ret;
+
+            {
+                auto symbol = std::get<symbol_variable_t>(*st.at(raw_name));
+
+                int current_id = 0;
+                std::string current_source =
+                    fmt::format("@{}", symbol.internal_name);
+                for (size_t i = 0; i < indices.size(); i++)
+                {
+                    auto expression = indices[i];
+                    if (auto const_value = expression->get_inline_number())
+                    {
+                        current_id = new_result_id();
+                        ret += fmt::format("    %{} = getelemptr {}, {}\n",
+                                           current_id, current_source,
+                                           *const_value);
+                    }
+                    else
+                    {
+                        ret += expression->to_koopa();
+                        current_id = new_result_id();
+                        ret += fmt::format("    %{} = getelemptr {}, %{}\n",
+                                           current_id, current_source,
+                                           expression->get_result_id());
+                    }
+                    current_source = fmt::format("%{}", current_id);
+                }
+                assign_result_id();
+                ret += fmt::format("    %{} = load {}\n", get_result_id(),
+                                   current_source);
+            }
+
+            return ret;
         }
     };
 
@@ -1880,15 +1909,37 @@ namespace compiler::ast
             expression_holder = fmt::format("%{}", expression->get_result_id());
         }
 
-        // Always regrad lvalue as a name.
-        // ret += lvalue->to_koopa();
         {
             auto ast_lvalue = std::dynamic_pointer_cast<ast_lvalue_t>(lvalue);
             auto symbol =
                 std::get<symbol_variable_t>(*st.at(ast_lvalue->raw_name));
 
-            ret += fmt::format("    store {}, @{}\n", expression_holder,
-                               symbol.internal_name);
+            int current_id = 0;
+            std::string current_source =
+                fmt::format("@{}", symbol.internal_name);
+            for (size_t i = 0; i < ast_lvalue->indices.size(); i++)
+            {
+                auto expression = ast_lvalue->indices[i];
+                if (auto const_value = expression->get_inline_number())
+                {
+                    current_id = new_result_id();
+                    ret +=
+                        fmt::format("    %{} = getelemptr {}, {}\n", current_id,
+                                    current_source, *const_value);
+                }
+                else
+                {
+                    ret += expression->to_koopa();
+                    current_id = new_result_id();
+                    ret += fmt::format("    %{} = getelemptr {}, %{}\n",
+                                       current_id, current_source,
+                                       expression->get_result_id());
+                }
+                current_source = fmt::format("%{}", current_id);
+            }
+
+            ret += fmt::format("    store {}, {}\n", expression_holder,
+                               current_source);
         }
         return ret;
     }
