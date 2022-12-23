@@ -279,6 +279,9 @@ nt_statement : RETURN nt_expression ';' {
     ast_statement->expression = std::get<ast_t>($2);
     $$ = ast_statement;
 }
+| RETURN ';' {
+    $$ = std::make_shared<ast_statement_1_t>();
+}
 | nt_lvalue '=' nt_expression ';' {
     auto ast_statement = std::make_shared<ast_statement_2_t>();
     ast_statement->lvalue = std::get<ast_t>($1);

@@ -287,6 +287,7 @@ namespace compiler::ast
     /**
      * @brief AST of a statement.
      * Stmt ::= "return" Exp ";";
+     * Stmt ::= "return" ";";
      */
     class ast_statement_1_t : public ast_base_t
     {
@@ -297,14 +298,19 @@ namespace compiler::ast
         std::string to_koopa() const override
         {
             std::string ret;
-            if (auto const_value = expression->get_inline_number())
-                ret += fmt::format("    ret {}\n", *const_value);
-            else
+            if (expression)
             {
-                ret += expression->to_koopa();
-                ret +=
-                    fmt::format("    ret %{}\n", expression->get_result_id());
+                if (auto const_value = expression->get_inline_number())
+                    ret += fmt::format("    ret {}\n", *const_value);
+                else
+                {
+                    ret += expression->to_koopa();
+                    ret += fmt::format("    ret %{}\n",
+                                       expression->get_result_id());
+                }
             }
+            else
+                ret += fmt::format("    ret\n");
             ret += fmt::format("%{}:\n", new_sequential_id());
             return ret;
         }
