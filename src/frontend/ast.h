@@ -213,7 +213,11 @@ namespace compiler::ast
 
     /**
      * @brief AST of a parameter.
+     * FuncFParam ::= BType IDENT ["[" "]" {"[" ConstExp "]"}];
+     * Fixed:
      * FuncFParam ::= BType IDENT;
+     * FuncFParam ::= BType IDENT "[" "]";
+     * FuncFParam ::= BType IDENT "[" "]" ArrDimList;
      */
     class ast_parameter_t : public ast_base_t
     {
@@ -1995,7 +1999,6 @@ namespace compiler::ast
             auto indices = flatten_to_indices(base_count, original_size_hint);
             for (size_t i = 0; i < indices.size(); i++)
             {
-                auto expression = indices[i];
                 current_id = new_result_id();
                 ret += fmt::format("    %{} = getelemptr {}, {}\n", current_id,
                                    current_source, indices[i]);
@@ -2046,6 +2049,7 @@ namespace compiler::ast
             if (std::holds_alternative<symbol_variable_t>(*st.at(raw_name)))
             {
                 auto symbol = std::get<symbol_variable_t>(*st.at(raw_name));
+                auto current_type = symbol.type;
 
                 int current_id = 0;
                 std::string current_source =
@@ -2053,57 +2057,119 @@ namespace compiler::ast
                 for (size_t i = 0; i < indices.size(); i++)
                 {
                     auto expression = indices[i];
+                    std::string inst;
+                    if (std::dynamic_pointer_cast<type_pointer_t>(current_type))
+                        inst = "getptr";
+                    else
+                        inst = "getelemptr";
+
+                    if (inst == "getptr")
+                    {
+                        current_id = new_result_id();
+                        ret += fmt::format("    %{} = load {}\n", current_id,
+                                           current_source);
+                        current_source = fmt::format("%{}", current_id);
+                    }
+
                     if (auto const_value = expression->get_inline_number())
                     {
                         current_id = new_result_id();
-                        ret += fmt::format("    %{} = getelemptr {}, {}\n",
-                                           current_id, current_source,
-                                           *const_value);
+                        ret += fmt::format("    %{} = {} {}, {}\n", current_id,
+                                           inst, current_source, *const_value);
                     }
                     else
                     {
                         ret += expression->to_koopa();
                         current_id = new_result_id();
-                        ret += fmt::format("    %{} = getelemptr {}, %{}\n",
-                                           current_id, current_source,
+                        ret += fmt::format("    %{} = {} {}, %{}\n", current_id,
+                                           inst, current_source,
                                            expression->get_result_id());
                     }
                     current_source = fmt::format("%{}", current_id);
+                    current_type = current_type->get_base_type();
                 }
+
                 assign_result_id();
-                ret += fmt::format("    %{} = load {}\n", get_result_id(),
-                                   current_source);
+                if (current_type->get_base_type()) // 转换为指针。
+                {
+                    if (std::dynamic_pointer_cast<type_array_t>(
+                            current_type)) // 数组隐式转换为指针。
+                    {
+                        ret += fmt::format("    %{} = getelemptr {}, 0\n",
+                                           get_result_id(), current_source);
+                    }
+                    else // 直接传递指针。
+                    {
+                        ret += fmt::format("    %{} = load {}\n",
+                                           get_result_id(), current_source);
+                    }
+                }
+                else
+                    ret += fmt::format("    %{} = load {}\n", get_result_id(),
+                                       current_source);
             }
             else if (std::holds_alternative<symbol_const_t>(*st.at(raw_name)))
             {
                 auto symbol = std::get<symbol_const_t>(*st.at(raw_name));
 
+                auto current_type = symbol.type;
+
                 int current_id = 0;
                 std::string current_source =
                     fmt::format("@{}", symbol.internal_name);
                 for (size_t i = 0; i < indices.size(); i++)
                 {
                     auto expression = indices[i];
+                    std::string inst;
+                    if (std::dynamic_pointer_cast<type_pointer_t>(current_type))
+                        inst = "getptr";
+                    else
+                        inst = "getelemptr";
+
+                    if (inst == "getptr")
+                    {
+                        current_id = new_result_id();
+                        ret += fmt::format("    %{} = load {}\n", current_id,
+                                           current_source);
+                        current_source = fmt::format("%{}", current_id);
+                    }
+
                     if (auto const_value = expression->get_inline_number())
                     {
                         current_id = new_result_id();
-                        ret += fmt::format("    %{} = getelemptr {}, {}\n",
-                                           current_id, current_source,
-                                           *const_value);
+                        ret += fmt::format("    %{} = {} {}, {}\n", current_id,
+                                           inst, current_source, *const_value);
                     }
                     else
                     {
                         ret += expression->to_koopa();
                         current_id = new_result_id();
-                        ret += fmt::format("    %{} = getelemptr {}, %{}\n",
-                                           current_id, current_source,
+                        ret += fmt::format("    %{} = {} {}, %{}\n", current_id,
+                                           inst, current_source,
                                            expression->get_result_id());
                     }
                     current_source = fmt::format("%{}", current_id);
+                    current_type = current_type->get_base_type();
                 }
+
                 assign_result_id();
-                ret += fmt::format("    %{} = load {}\n", get_result_id(),
-                                   current_source);
+                if (current_type->get_base_type()) // 转换为指针。
+                {
+                    if (std::dynamic_pointer_cast<type_array_t>(
+                            current_type)) // 数组隐式转换为指针。
+                    {
+                        ret += fmt::format("    %{} = getelemptr {}, 0\n",
+                                           get_result_id(), current_source);
+                    }
+                    else // 直接传递指针。
+                    {
+                        ret += fmt::format("    %{} = load {}\n",
+                                           get_result_id(), current_source);
+                    }
+                }
+                else
+                    ret += fmt::format("    %{} = load {}\n", get_result_id(),
+                                       current_source);
             }
 
             return ret;
@@ -2344,6 +2410,7 @@ namespace compiler::ast
             auto ast_lvalue = std::dynamic_pointer_cast<ast_lvalue_t>(lvalue);
             auto symbol =
                 std::get<symbol_variable_t>(*st.at(ast_lvalue->raw_name));
+            auto current_type = symbol.type;
 
             int current_id = 0;
             std::string current_source =
@@ -2351,22 +2418,36 @@ namespace compiler::ast
             for (size_t i = 0; i < ast_lvalue->indices.size(); i++)
             {
                 auto expression = ast_lvalue->indices[i];
+                std::string inst;
+                if (std::dynamic_pointer_cast<type_pointer_t>(current_type))
+                    inst = "getptr";
+                else
+                    inst = "getelemptr";
+
+                if (inst == "getptr")
+                {
+                    current_id = new_result_id();
+                    ret += fmt::format("    %{} = load {}\n", current_id,
+                                       current_source);
+                    current_source = fmt::format("%{}", current_id);
+                }
+
                 if (auto const_value = expression->get_inline_number())
                 {
                     current_id = new_result_id();
-                    ret +=
-                        fmt::format("    %{} = getelemptr {}, {}\n", current_id,
-                                    current_source, *const_value);
+                    ret += fmt::format("    %{} = {} {}, {}\n", current_id,
+                                       inst, current_source, *const_value);
                 }
                 else
                 {
                     ret += expression->to_koopa();
                     current_id = new_result_id();
-                    ret += fmt::format("    %{} = getelemptr {}, %{}\n",
-                                       current_id, current_source,
+                    ret += fmt::format("    %{} = {} {}, %{}\n", current_id,
+                                       inst, current_source,
                                        expression->get_result_id());
                 }
                 current_source = fmt::format("%{}", current_id);
+                current_type = current_type->get_base_type();
             }
 
             ret += fmt::format("    store {}, {}\n", expression_holder,

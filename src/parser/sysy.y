@@ -11,6 +11,7 @@
 %{
 // 包含头文件。
 #include <iostream>
+#include <stdexcept>
 
 #include <fmt/core.h>
 %}
@@ -209,6 +210,38 @@ nt_parameter_list : nt_parameter {
 nt_parameter : nt_type IDENTIFIER {
     auto parameter = std::make_shared<ast_parameter_t>();
     parameter->type = std::get<ast_t>($1);
+    parameter->raw_name = std::get<string>($2);
+    $$ = parameter;
+}
+| nt_type IDENTIFIER '[' ']' {
+    auto parameter = std::make_shared<ast_parameter_t>();
+    auto type = std::dynamic_pointer_cast<ast_type_t>(std::get<ast_t>($1))->type;
+    auto ast_type = std::make_shared<ast_type_t>();
+    ast_type->type = *(*type);
+    parameter->type = ast_type;
+    parameter->raw_name = std::get<string>($2);
+    $$ = parameter;
+}
+| nt_type IDENTIFIER '[' ']' nt_array_dimension_list {
+    auto parameter = std::make_shared<ast_parameter_t>();
+    auto type = std::dynamic_pointer_cast<ast_type_t>(std::get<ast_t>($1))->type;
+    auto ast_type = std::make_shared<ast_type_t>();
+
+    std::vector<size_t> sizes;
+    {
+        auto current_list = std::dynamic_pointer_cast<ast_array_dimension_list_t>(std::get<ast_t>($5));
+        while (current_list)
+        {
+            auto dimension = std::dynamic_pointer_cast<ast_const_expression_t>(std::move(current_list->array_dimension));
+            sizes.push_back(*(dimension->get_inline_number()));
+            current_list = current_list->array_dimension_list;
+        }
+    }
+	for (size_t i = sizes.size() - 1; ~i; i--)
+		type = (*type)[sizes[i]];
+
+    ast_type->type = *(*type);
+    parameter->type = ast_type;
     parameter->raw_name = std::get<string>($2);
     $$ = parameter;
 }
@@ -785,4 +818,5 @@ nt_index : '[' nt_expression ']' {
 void yyerror(ast_t& ast, const char* s)
 {
     std::cerr << fmt::format("[Error] YACC: {}.", s) << std::endl;
+    throw std::runtime_error(fmt::format("[Error] YACC: {}.", s));
 }
