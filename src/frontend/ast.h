@@ -120,6 +120,40 @@ namespace compiler::ast
     };
 
     /**
+     * @brief A utility AST type that forms a list structure.
+     *
+     * @note This is a temporary type only used in syntax analysis.
+     */
+    class ast_list_t : public ast_base_t,
+                       public std::enable_shared_from_this<ast_list_t>
+    {
+    public:
+        ast_t value;
+        std::shared_ptr<ast_list_t> next;
+
+    public:
+        ast_list_t() = default;
+        explicit ast_list_t(ast_t value) : value(value) {}
+        ast_list_t(ast_t value, ast_t next)
+            : value(value), next(std::dynamic_pointer_cast<ast_list_t>(next))
+        {
+        }
+
+    public:
+        std::vector<ast_t> to_vector() const
+        {
+            std::vector<ast_t> ret;
+            auto current_list = shared_from_this();
+            while (current_list)
+            {
+                ret.push_back(current_list->value);
+                current_list = current_list->next;
+            }
+            return ret;
+        }
+    };
+
+    /**
      * @brief AST of a complete program.
      * CompUnit ::= [CompUnit] (Decl | FuncDef);
      * Fixed:
@@ -165,21 +199,6 @@ namespace compiler::ast
     };
 
     /**
-     * @brief AST of a declaration or function list.
-     * DeclOrFuncList ::= (Decl | FuncDef);
-     * DeclOrFuncList ::= (Decl | FuncDef) DeclOrFuncList;
-     *
-     * @note This is a temporary type only used in syntax analysis.
-     */
-    class ast_declaration_or_function_list_t : public ast_base_t
-    {
-    public:
-        ast_t item;
-        std::shared_ptr<ast_declaration_or_function_list_t>
-            declaration_or_function_list;
-    };
-
-    /**
      * @brief AST of a function.
      * FuncDef ::= FuncType IDENT "(" [FuncFParams] ")" Block;
      * Fixed:
@@ -196,20 +215,6 @@ namespace compiler::ast
 
     public:
         std::string to_koopa() const override;
-    };
-
-    /**
-     * @brief AST of a parameter list.
-     * FuncFParamList ::= FuncFParam;
-     * FuncFParamList ::= FuncFParam "," FuncFParamList;
-     *
-     * @note This is a temporary type only used in syntax analysis.
-     */
-    class ast_parameter_list_t : public ast_base_t
-    {
-    public:
-        ast_t parameter;
-        std::shared_ptr<ast_parameter_list_t> parameter_list;
     };
 
     /**
@@ -252,20 +257,6 @@ namespace compiler::ast
             st.pop();
             return ret;
         }
-    };
-
-    /**
-     * @brief AST of a block item list.
-     * BlockItemList ::= BlockItem;
-     * BlockItemList ::= BlockItem BlockItemList;
-     *
-     * @note This is a temporary type only used in syntax analysis.
-     */
-    class ast_block_item_list_t : public ast_base_t
-    {
-    public:
-        ast_t block_item;
-        std::shared_ptr<ast_block_item_list_t> block_item_list;
     };
 
     /**
@@ -733,20 +724,6 @@ namespace compiler::ast
                                symbol.internal_name, argument_string);
             return ret;
         }
-    };
-
-    /**
-     * @brief AST of a argument list.
-     * FuncRParamList ::= Exp;
-     * FuncRParamList ::= Exp "," FuncRParamList;
-     *
-     * @note This is a temporary type only used in syntax analysis.
-     */
-    class ast_argument_list_t : public ast_base_t
-    {
-    public:
-        ast_t argument;
-        std::shared_ptr<ast_argument_list_t> argument_list;
     };
 
     /**
@@ -1441,20 +1418,6 @@ namespace compiler::ast
     };
 
     /**
-     * @brief AST of a const definition list.
-     * ConstDefList ::= ConstDef;
-     * ConstDefList ::= ConstDef "," ConstDefList;
-     *
-     * @note This is a temporary type only used in syntax analysis.
-     */
-    class ast_const_definition_list_t : public ast_base_t
-    {
-    public:
-        ast_t const_definition;
-        std::shared_ptr<ast_const_definition_list_t> const_definition_list;
-    };
-
-    /**
      * @brief AST of a const definition.
      * ConstDef ::= IDENT {"[" ConstExp "]"} "=" ConstInitVal;
      * Fixed:
@@ -1470,35 +1433,6 @@ namespace compiler::ast
 
     public:
         std::string to_koopa() const override;
-    };
-
-    /**
-     * @brief AST of an array dimension list.
-     * ArrDimList ::= ArrDim;
-     * ArrDimList ::= ArrDim ArrDimList;
-     *
-     * @note This is a temporary type only used in syntax analysis.
-     */
-    class ast_array_dimension_list_t : public ast_base_t
-    {
-    public:
-        ast_t array_dimension; // An array dimension is a const expression.
-        std::shared_ptr<ast_array_dimension_list_t> array_dimension_list;
-    };
-
-    /**
-     * @brief AST of a const initial value list.
-     * ConstInitValList ::= ConstInitVal;
-     * ConstInitValList ::= ConstInitVal "," ConstInitValList;
-     *
-     * @note This is a temporary type only used in syntax analysis.
-     */
-    class ast_const_initial_value_list_t : public ast_base_t
-    {
-    public:
-        ast_t const_initial_value;
-        std::shared_ptr<ast_const_initial_value_list_t>
-            const_initial_value_list;
     };
 
     /**
@@ -1683,21 +1617,6 @@ namespace compiler::ast
     };
 
     /**
-     * @brief AST of a variable definition list.
-     * VarDefList ::= VarDef;
-     * VarDefList ::= VarDef "," VarDefList;
-     *
-     * @note This is a temporary type only used in syntax analysis.
-     */
-    class ast_variable_definition_list_t : public ast_base_t
-    {
-    public:
-        ast_t variable_definition;
-        std::shared_ptr<ast_variable_definition_list_t>
-            variable_definition_list;
-    };
-
-    /**
      * @brief AST of a variable definition.
      * Base class holding the type and name.
      */
@@ -1770,20 +1689,6 @@ namespace compiler::ast
 
     public:
         std::string to_koopa() const override;
-    };
-
-    /**
-     * @brief AST of an initial value list.
-     * InitValList ::= InitVal;
-     * InitValList ::= InitVal "," InitValList;
-     *
-     * @note This is a temporary type only used in syntax analysis.
-     */
-    class ast_initial_value_list_t : public ast_base_t
-    {
-    public:
-        ast_t initial_value;
-        std::shared_ptr<ast_initial_value_list_t> initial_value_list;
     };
 
     /**
@@ -2181,20 +2086,6 @@ namespace compiler::ast
 
             return ret;
         }
-    };
-
-    /**
-     * @brief AST of an index list.
-     * IdxList ::= Idx;
-     * IdxList ::= Idx IdxList;
-     *
-     * @note This is a temporary type only used in syntax analysis.
-     */
-    class ast_index_list_t : public ast_base_t
-    {
-    public:
-        ast_t index;
-        std::shared_ptr<ast_index_list_t> index_list;
     };
 
     inline std::string ast_const_definition_t::to_koopa() const
