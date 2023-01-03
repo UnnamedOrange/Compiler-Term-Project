@@ -325,15 +325,11 @@ nt_primary_expression : '(' nt_expression ')' {
     $$ = ast_primary_expression;
 }
 nt_unary_expression : nt_primary_expression {
-    auto ast_unary_expression = std::make_shared<ast_unary_expression_1_t>();
-    ast_unary_expression->primary_expression = std::get<ast_t>($1);
-    $$ = ast_unary_expression;
+    $$ = std::make_shared<ast_nonlogical_expression_1_t>(std::get<ast_t>($1));
 }
 | nt_unary_operator nt_unary_expression {
-    auto ast_unary_expression = std::make_shared<ast_unary_expression_2_t>();
-    ast_unary_expression->op = std::get<string>($1);
-    ast_unary_expression->unary_expression = std::get<ast_t>($2);
-    $$ = ast_unary_expression;
+    $$ = std::make_shared<ast_nonlogical_expression_2_t>(
+        nullptr, std::get<string>($1), std::get<ast_t>($2));
 }
 | IDENTIFIER '(' ')' {
     auto ast_unary_expression = std::make_shared<ast_unary_expression_3_t>();
@@ -348,13 +344,13 @@ nt_unary_expression : nt_primary_expression {
     $$ = ast_unary_expression;
 }
 nt_unary_operator : '+' {
-    $$ = $1;
+    $$ = "pos";
 }
 | '-' {
-    $$ = $1;
+    $$ = "neg";
 }
 | '!' {
-    $$ = $1;
+    $$ = "not";
 }
 nt_argument_list : nt_expression {
 	$$ = std::make_shared<ast_list_t>(std::get<ast_t>($1));
@@ -363,85 +359,65 @@ nt_argument_list : nt_expression {
     $$ = std::make_shared<ast_list_t>(std::get<ast_t>($1), std::get<ast_t>($3));
 }
 nt_multiply_expression : nt_unary_expression {
-    auto ast_multiply_expression = std::make_shared<ast_multiply_expression_1_t>();
-    ast_multiply_expression->unary_expression = std::get<ast_t>($1);
-    $$ = ast_multiply_expression;
+    $$ = std::make_shared<ast_nonlogical_expression_1_t>(std::get<ast_t>($1));
 }
 | nt_multiply_expression nt_multiply_operator nt_unary_expression {
-    auto ast_multiply_expression = std::make_shared<ast_multiply_expression_2_t>();
-    ast_multiply_expression->multiply_expression = std::get<ast_t>($1);
-    ast_multiply_expression->op = std::get<string>($2);
-    ast_multiply_expression->unary_expression = std::get<ast_t>($3);
-    $$ = ast_multiply_expression;
+    $$ = std::make_shared<ast_nonlogical_expression_2_t>(
+        std::get<ast_t>($1), std::get<string>($2), std::get<ast_t>($3));
 }
 nt_multiply_operator : '*' {
-    $$ = $1;
+    $$ = "mul";
 }
 | '/' {
-    $$ = $1;
+    $$ = "div";
 }
 | '%' {
-    $$ = $1;
+    $$ = "mod";
 }
 nt_add_expression : nt_multiply_expression {
-    auto ast_add_expression = std::make_shared<ast_add_expression_1_t>();
-    ast_add_expression->multiply_expression = std::get<ast_t>($1);
-    $$ = ast_add_expression;
+    $$ = std::make_shared<ast_nonlogical_expression_1_t>(std::get<ast_t>($1));
 }
 | nt_add_expression nt_add_operator nt_multiply_expression {
-    auto ast_add_expression = std::make_shared<ast_add_expression_2_t>();
-    ast_add_expression->add_expression = std::get<ast_t>($1);
-    ast_add_expression->op = std::get<string>($2);
-    ast_add_expression->multiply_expression = std::get<ast_t>($3);
-    $$ = ast_add_expression;
+    $$ = std::make_shared<ast_nonlogical_expression_2_t>(
+        std::get<ast_t>($1), std::get<string>($2), std::get<ast_t>($3));
 }
 nt_add_operator : '+' {
-    $$ = $1;
+    $$ = "add";
 }
 | '-' {
-    $$ = $1;
+    $$ = "sub";
 }
 nt_relation_expression : nt_add_expression {
-    auto ast_relation_expression = std::make_shared<ast_relation_expression_1_t>();
-    ast_relation_expression->add_expression = std::get<ast_t>($1);
-    $$ = ast_relation_expression;
+    $$ = std::make_shared<ast_nonlogical_expression_1_t>(std::get<ast_t>($1));
 }
 | nt_relation_expression nt_relation_operator nt_add_expression {
-    auto ast_relation_expression = std::make_shared<ast_relation_expression_2_t>();
-    ast_relation_expression->relation_expression = std::get<ast_t>($1);
-    ast_relation_expression->op = std::get<string>($2);
-    ast_relation_expression->add_expression = std::get<ast_t>($3);
-    $$ = ast_relation_expression;
+    $$ = std::make_shared<ast_nonlogical_expression_2_t>(
+        std::get<ast_t>($1), std::get<string>($2), std::get<ast_t>($3));
 }
 nt_relation_operator : LT {
-    $$ = $1;
+    $$ = "lt";
 }
 | GT {
-    $$ = $1;
+    $$ = "gt";
 }
 | LE {
-    $$ = $1;
+    $$ = "le";
 }
 | GE {
-    $$ = $1;
+    $$ = "ge";
 }
 nt_equation_expression : nt_relation_expression {
-    auto ast_equation_expression = std::make_shared<ast_equation_expression_1_t>();
-    ast_equation_expression->relation_expression = std::get<ast_t>($1);
-    $$ = ast_equation_expression;
+    $$ = std::make_shared<ast_nonlogical_expression_1_t>(std::get<ast_t>($1));
 }
 | nt_equation_expression nt_equation_operator nt_relation_expression {
-    auto ast_equation_expression = std::make_shared<ast_equation_expression_2_t>();
-    ast_equation_expression->equation_expression = std::get<ast_t>($1);
-    ast_equation_expression->op = std::get<string>($2);
-    ast_equation_expression->relation_expression = std::get<ast_t>($3);
-    $$ = ast_equation_expression;
+    $$ = std::make_shared<ast_nonlogical_expression_2_t>(
+        std::get<ast_t>($1), std::get<string>($2), std::get<ast_t>($3));
 }
 nt_equation_operator : EQ {
-    $$ = $1;
+    $$ = "eq";
 }
 | NE {
-    $$ = $1;
+    $$ = "ne";
 }
 nt_land_expression : nt_equation_expression {
     auto ast_land_expression = std::make_shared<ast_land_expression_1_t>();
