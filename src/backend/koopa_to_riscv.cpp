@@ -184,7 +184,7 @@ std::string visit(const koopa_raw_get_elem_ptr_t&, const koopa_raw_value_t&);
 std::string visit(const koopa_raw_get_ptr_t&, const koopa_raw_value_t&);
 std::string visit_array_or_pointer(const koopa_raw_value_t&,
                                    const koopa_raw_value_t&,
-                                   const koopa_raw_value_t&);
+                                   const koopa_raw_value_t&, bool is_array);
 
 std::string to_riscv(const std::string& koopa)
 {
@@ -276,7 +276,13 @@ std::string visit(const koopa_raw_function_t& func)
                                      instruction->kind.data.call.args.len);
                     }
 
-                    if (instruction->ty->tag != KOOPA_RTT_UNIT)
+                    if (instruction->kind.tag == KOOPA_RVT_ALLOC)
+                    {
+                        // alloc 语句返回值是一个指针，需要取基类型。
+                        sfm.alloc(instruction,
+                                  get_size(instruction->ty->data.pointer.base));
+                    }
+                    else if (instruction->ty->tag != KOOPA_RTT_UNIT)
                     {
                         sfm.alloc(instruction, get_size(instruction->ty));
                         // 不用单独考虑操作数，因为操作数一定是算出来的。
@@ -699,18 +705,19 @@ std::string visit(const koopa_raw_get_elem_ptr_t& get_elem_ptr_inst,
 {
     const auto& source = get_elem_ptr_inst.src;
     const auto& index = get_elem_ptr_inst.index;
-    return visit_array_or_pointer(source, index, parent_value);
+    return visit_array_or_pointer(source, index, parent_value, true);
 }
 std::string visit(const koopa_raw_get_ptr_t& get_ptr_inst,
                   const koopa_raw_value_t& parent_value)
 {
     const auto& source = get_ptr_inst.src;
     const auto& index = get_ptr_inst.index;
-    return visit_array_or_pointer(source, index, parent_value);
+    return visit_array_or_pointer(source, index, parent_value, false);
 }
 std::string visit_array_or_pointer(const koopa_raw_value_t& source,
                                    const koopa_raw_value_t& index,
-                                   const koopa_raw_value_t& parent_value)
+                                   const koopa_raw_value_t& parent_value,
+                                   bool is_array)
 {
     std::string ret;
 
@@ -748,7 +755,12 @@ std::string visit_array_or_pointer(const koopa_raw_value_t& source,
         }
         // 将数组大小存入 reg_z。
         {
-            size_t size = get_size(source->ty);
+            const auto first_base_type = source->ty->data.pointer.base;
+            size_t size;
+            if (is_array) // 数组不能直接存在，最外层指针是首次解引用。
+                size = get_size(first_base_type->data.array.base);
+            else // 指针的下一层就是对应数组。
+                size = get_size(first_base_type);
             ret += fmt::format("    li {}, {}\n", reg_z, size);
         }
         // 计算偏移量，保存至 reg_y。
