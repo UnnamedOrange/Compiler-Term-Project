@@ -112,6 +112,60 @@ std::string generate_store(const std::string& target_reg,
     return ret;
 }
 
+size_t get_size(const koopa_raw_type_t& value)
+{
+    switch (value->tag)
+    {
+    case KOOPA_RTT_INT32:
+        return 4;
+    case KOOPA_RTT_UNIT:
+        return 0;
+    case KOOPA_RTT_ARRAY:
+    {
+        const auto& a = value->data.array;
+        return a.len * get_size(a.base);
+    }
+    case KOOPA_RTT_POINTER:
+        return 4;
+    case KOOPA_RTT_FUNCTION:
+        return 0;
+    }
+    return 0;
+}
+
+std::string generate_global_init(const koopa_raw_value_t& init)
+{
+    std::string ret;
+    switch (init->kind.tag)
+    {
+    case KOOPA_RVT_ZERO_INIT:
+    {
+        ret += fmt::format("    .zero {}\n", get_size(init->ty));
+        break;
+    }
+    case KOOPA_RVT_INTEGER:
+    {
+        ret += fmt::format("    .word {}\n", init->kind.data.integer.value);
+        break;
+    }
+    case KOOPA_RVT_AGGREGATE:
+    {
+        const auto& aggregate = init->kind.data.aggregate;
+        const auto& slice = aggregate.elems;
+        for (uint32_t i = 0; i < slice.len; ++i)
+        {
+            auto ptr = slice.buffer[i];
+            ret +=
+                generate_global_init(reinterpret_cast<koopa_raw_value_t>(ptr));
+        }
+        break;
+    }
+    default:
+        break;
+    }
+    return ret;
+}
+
 std::string to_riscv(const std::string&);
 std::string visit(const koopa_raw_program_t&);
 std::string visit(const koopa_raw_slice_t&);
@@ -126,6 +180,11 @@ std::string visit(const koopa_raw_jump_t&);
 std::string visit(const koopa_raw_branch_t&);
 std::string visit(const koopa_raw_call_t&, const koopa_raw_value_t&);
 std::string visit(const koopa_raw_global_alloc_t&, const koopa_raw_value_t&);
+std::string visit(const koopa_raw_get_elem_ptr_t&, const koopa_raw_value_t&);
+std::string visit(const koopa_raw_get_ptr_t&, const koopa_raw_value_t&);
+std::string visit_array_or_pointer(const koopa_raw_value_t&,
+                                   const koopa_raw_value_t&,
+                                   const koopa_raw_value_t&);
 
 std::string to_riscv(const std::string& koopa)
 {
@@ -219,8 +278,7 @@ std::string visit(const koopa_raw_function_t& func)
 
                     if (instruction->ty->tag != KOOPA_RTT_UNIT)
                     {
-                        // 暂时认为都是 int32_t。
-                        sfm.alloc(instruction, 4);
+                        sfm.alloc(instruction, get_size(instruction->ty));
                         // 不用单独考虑操作数，因为操作数一定是算出来的。
                     }
                 }
@@ -304,6 +362,14 @@ std::string visit(const koopa_raw_value_t& value)
     case KOOPA_RVT_GLOBAL_ALLOC:
         // 访问 global 指令。
         ret += visit(kind.data.global_alloc, value);
+        break;
+    case KOOPA_RVT_GET_ELEM_PTR:
+        // 访问 getelemptr 指令。
+        ret += visit(kind.data.get_elem_ptr, value);
+        break;
+    case KOOPA_RVT_GET_PTR:
+        // 访问 getelemptr 指令。
+        ret += visit(kind.data.get_ptr, value);
         break;
     default:
         // 其他类型暂时遇不到。
@@ -622,13 +688,78 @@ std::string visit(const koopa_raw_global_alloc_t& global_alloc_inst,
     ret += fmt::format("    .globl {}\n", parent_value->name + 1);
     ret += fmt::format("{}:\n", parent_value->name + 1);
 
-    if (global_alloc_inst.init->kind.tag == KOOPA_RVT_ZERO_INIT)
-        ret += fmt::format("    .zero {}\n", 4);
-    else if (global_alloc_inst.init->kind.tag == KOOPA_RVT_INTEGER)
-        ret += fmt::format("    .word {}\n",
-                           global_alloc_inst.init->kind.data.integer.value);
+    ret += generate_global_init(global_alloc_inst.init);
 
     ret += "\n";
+
+    return ret;
+}
+std::string visit(const koopa_raw_get_elem_ptr_t& get_elem_ptr_inst,
+                  const koopa_raw_value_t& parent_value)
+{
+    const auto& source = get_elem_ptr_inst.src;
+    const auto& index = get_elem_ptr_inst.index;
+    return visit_array_or_pointer(source, index, parent_value);
+}
+std::string visit(const koopa_raw_get_ptr_t& get_ptr_inst,
+                  const koopa_raw_value_t& parent_value)
+{
+    const auto& source = get_ptr_inst.src;
+    const auto& index = get_ptr_inst.index;
+    return visit_array_or_pointer(source, index, parent_value);
+}
+std::string visit_array_or_pointer(const koopa_raw_value_t& source,
+                                   const koopa_raw_value_t& index,
+                                   const koopa_raw_value_t& parent_value)
+{
+    std::string ret;
+
+    std::string reg_x = rm.reg_x; // 存放数组的基地址。最终存放结果。
+    std::string reg_y = rm.reg_y; // 最终存放偏移量。
+    std::string reg_z = rm.reg_z; // 临时寄存器。
+
+    // 加载数组基地址。
+    {
+        if (gvm.count(source))
+            ret += fmt::format("    la {}, {}\n", reg_x, gvm.at(source));
+        else
+        {
+            auto offset = sfm.offset(source);
+            if (-2048 <= offset && offset < 2048)
+                ret += fmt::format("    addi {}, sp, {}\n", reg_x, offset);
+            else // 太大，使用 li 指令代替立即数。
+            {
+                ret += fmt::format("    li {}, {}\n", reg_z, offset);
+                ret += fmt::format("    add {}, sp, {}\n", reg_x, reg_z);
+            }
+        }
+    }
+
+    // 计算偏移量。
+    {
+        // 将下标存入 reg_y。
+        {
+            // 如果是常量，将整数写入寄存器。
+            if (index->kind.tag == KOOPA_RVT_INTEGER)
+                ret += fmt::format("    li {}, {}\n", reg_y,
+                                   index->kind.data.integer.value);
+            else // 将变量加载到寄存器。
+                ret += generate_load(reg_y, reg_z, index);
+        }
+        // 将数组大小存入 reg_z。
+        {
+            size_t size = get_size(source->ty);
+            ret += fmt::format("    li {}, {}\n", reg_z, size);
+        }
+        // 计算偏移量，保存至 reg_y。
+        ret += fmt::format("    mul {}, {}, {}\n", reg_y, reg_y, reg_z);
+    }
+
+    // 计算最终结果。
+    ret += fmt::format("    add {}, {}, {}\n", reg_x, reg_x, reg_y);
+
+    // 保存结果到栈帧。
+    ret += generate_store(reg_x, reg_z, parent_value);
 
     return ret;
 }
