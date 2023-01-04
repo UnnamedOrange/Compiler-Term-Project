@@ -32,6 +32,7 @@ using namespace compiler;
 register_manager rm;
 stack_frame_manager sfm;
 global_variable_manager gvm;
+global_variable_manager lvm; // 保存 alloc 的局部变量。
 
 koopa_raw_function_t current_function;
 
@@ -185,6 +186,7 @@ std::string visit(const koopa_raw_get_ptr_t&, const koopa_raw_value_t&);
 std::string visit_array_or_pointer(const koopa_raw_value_t&,
                                    const koopa_raw_value_t&,
                                    const koopa_raw_value_t&, bool is_array);
+void visit_alloc(const koopa_raw_value_t&);
 
 std::string to_riscv(const std::string& koopa)
 {
@@ -343,7 +345,8 @@ std::string visit(const koopa_raw_value_t& value)
         ret += visit(kind.data.binary, value);
         break;
     case KOOPA_RVT_ALLOC:
-        // 无需处理 alloc 指令。
+        // 访问 alloc 指令，但不生成代码。
+        visit_alloc(value);
         break;
     case KOOPA_RVT_LOAD:
         // 访问 load 指令。
@@ -541,6 +544,9 @@ std::string visit(const koopa_raw_load_t& load_inst,
 
     // 将变量加载到寄存器。
     ret += generate_load(reg_x, reg_y, load_inst.src);
+    if (!gvm.count(load_inst.src) &&
+        !lvm.count(load_inst.src)) // 临时变量，读取到的是地址。
+        ret += fmt::format("    lw {}, 0({})\n", reg_x, reg_x);
 
     // 将结果保存至内存。
     ret += generate_store(reg_x, reg_y, parent_value);
@@ -551,7 +557,8 @@ std::string visit(const koopa_raw_store_t& store_inst)
 {
     std::string ret;
     std::string reg_x = rm.reg_x; // 保存值的寄存器。
-    std::string reg_y = rm.reg_y; // 保存偏移量的寄存器。
+    std::string reg_y = rm.reg_y; // 保存地址的寄存器。
+    std::string reg_z = rm.reg_z; // 临时寄存器。
 
     // 将值加载到寄存器。
     {
@@ -586,14 +593,21 @@ std::string visit(const koopa_raw_store_t& store_inst)
                 offset = sfm.offset(store_inst.value);
 
             if (argument_register.empty()) // 不对应寄存器，从内存中加载参数。
-                ret += generate_load(reg_x, reg_y, offset);
+                ret += generate_load(reg_x, reg_z, offset);
             else // 将参数从寄存器保存到内存中。
                 ret += fmt::format("    mv {}, {}\n", reg_x, argument_register);
         }
     }
 
     // 将结果保存至内存。
-    ret += generate_store(reg_x, reg_y, store_inst.dest);
+    if (!gvm.count(store_inst.dest) &&
+        !lvm.count(store_inst.dest)) // 临时变量，目的地是地址。
+    {
+        ret += generate_load(reg_y, reg_z, store_inst.dest);
+        ret += fmt::format("    sw {}, 0({})\n", reg_x, reg_y);
+    }
+    else // 在栈中找到地址。
+        ret += generate_store(reg_x, reg_y, store_inst.dest);
 
     return ret;
 }
@@ -729,7 +743,7 @@ std::string visit_array_or_pointer(const koopa_raw_value_t& source,
     {
         if (gvm.count(source))
             ret += fmt::format("    la {}, {}\n", reg_x, gvm.at(source));
-        else
+        else if (lvm.count(source))
         {
             auto offset = sfm.offset(source);
             if (-2048 <= offset && offset < 2048)
@@ -740,6 +754,8 @@ std::string visit_array_or_pointer(const koopa_raw_value_t& source,
                 ret += fmt::format("    add {}, sp, {}\n", reg_x, reg_z);
             }
         }
+        else // 临时变量，从内存中读。
+            ret += generate_load(reg_x, reg_z, source);
     }
 
     // 计算偏移量。
@@ -774,6 +790,11 @@ std::string visit_array_or_pointer(const koopa_raw_value_t& source,
     ret += generate_store(reg_x, reg_z, parent_value);
 
     return ret;
+}
+void visit_alloc(const koopa_raw_value_t& value)
+{
+    // 标记 alloc 的变量。
+    lvm.alloc(value, "");
 }
 
 std::string koopa_to_riscv::compile(const std::string& koopa_ir_str)
